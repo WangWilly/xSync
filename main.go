@@ -222,6 +222,8 @@ func initLogger(dbg bool, logFile io.Writer) {
 }
 
 func main() {
+	println("xSync - X Post Downloader")
+
 	//flags
 	var usrArgs userArgs
 	var listArgs ListArgs

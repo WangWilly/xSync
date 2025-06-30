@@ -226,47 +226,6 @@ func syncUser(db *sqlx.DB, user *twitter.User) error {
 	return err
 }
 
-func getTweetAndUpdateLatestReleaseTime(ctx context.Context, client *resty.Client, user *twitter.User, entity *UserEntity) ([]*twitter.Tweet, error) {
-	tweets, err := user.GetMeidas(ctx, client, &utils.TimeRange{Min: entity.LatestReleaseTime()})
-	if err != nil || len(tweets) == 0 {
-		return nil, err
-	}
-	if err := entity.SetLatestReleaseTime(tweets[0].CreatedAt); err != nil {
-		return nil, err
-	}
-	return tweets, nil
-}
-
-func DownloadUser(ctx context.Context, db *sqlx.DB, client *resty.Client, user *twitter.User, dir string) ([]PackgedTweet, error) {
-	if user.Blocking || user.Muting {
-		return nil, nil
-	}
-
-	_, loaded := syncedUsers.Load(user.Id)
-	if loaded {
-		log.WithField("user", user.Title()).Debugln("skiped downloaded user")
-		return nil, nil
-	}
-	entity, err := syncUserAndEntity(db, user, dir)
-	if err != nil {
-		return nil, err
-	}
-
-	syncedUsers.Store(user.Id, entity)
-	tweets, err := getTweetAndUpdateLatestReleaseTime(ctx, client, user, entity)
-	if err != nil || len(tweets) == 0 {
-		return nil, err
-	}
-
-	// 打包推文
-	pts := make([]PackgedTweet, 0, len(tweets))
-	for _, tw := range tweets {
-		pts = append(pts, TweetInEntity{Tweet: tw, Entity: entity})
-	}
-
-	return BatchDownloadTweet(ctx, client, pts...), nil
-}
-
 func syncUserAndEntity(db *sqlx.DB, user *twitter.User, dir string) (*UserEntity, error) {
 	if err := syncUser(db, user); err != nil {
 		return nil, err
@@ -621,30 +580,6 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 	return fails, context.Cause(ctx)
 }
 
-func downloadList(ctx context.Context, client *resty.Client, db *sqlx.DB, list twitter.ListBase, dir string, realDir string, autoFollow bool, additional []*resty.Client) ([]*TweetInEntity, error) {
-	expectedTitle := utils.WinFileName(list.Title())
-	entity, err := NewListEntity(db, list.GetId(), dir)
-	if err != nil {
-		return nil, err
-	}
-	if err := syncPath(entity, expectedTitle); err != nil {
-		return nil, err
-	}
-
-	members, err := list.GetMembers(ctx, client)
-	if err != nil || len(members) == 0 {
-		return nil, err
-	}
-
-	eid := entity.Id()
-	log.Debugln("members:", len(members))
-	packgedUsers := make([]userInLstEntity, len(members))
-	for i, user := range members {
-		packgedUsers[i] = userInLstEntity{user: user, leid: &eid}
-	}
-	return BatchUserDownload(ctx, client, db, packgedUsers, realDir, autoFollow, additional)
-}
-
 func syncList(db *sqlx.DB, list *twitter.List) error {
 	listdb, err := database.GetLst(db, list.Id)
 	if err != nil {
@@ -654,16 +589,6 @@ func syncList(db *sqlx.DB, list *twitter.List) error {
 		return database.CreateLst(db, &database.Lst{Id: list.Id, Name: list.Name, OwnerId: list.Creator.Id})
 	}
 	return database.UpdateLst(db, &database.Lst{Id: list.Id, Name: list.Name, OwnerId: list.Creator.Id})
-}
-
-func DownloadList(ctx context.Context, client *resty.Client, db *sqlx.DB, list twitter.ListBase, dir string, realDir string, autoFollow bool, additional []*resty.Client) ([]*TweetInEntity, error) {
-	tlist, ok := list.(*twitter.List)
-	if ok {
-		if err := syncList(db, tlist); err != nil {
-			return nil, err
-		}
-	}
-	return downloadList(ctx, client, db, list, dir, realDir, autoFollow, additional)
 }
 
 func syncLstAndGetMembers(ctx context.Context, client *resty.Client, db *sqlx.DB, lst twitter.ListBase, dir string) ([]userInLstEntity, error) {
