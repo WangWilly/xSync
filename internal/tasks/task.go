@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/WangWilly/xSync/internal/cli"
+	"github.com/WangWilly/xSync/internal/twitter"
 	"github.com/go-resty/resty/v2"
-	"github.com/unkmonster/tmd/internal/cli"
-	"github.com/unkmonster/tmd/internal/twitter"
 )
 
 ////////////////////////////////////////////////////////////////////////////////

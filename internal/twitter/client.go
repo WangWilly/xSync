@@ -13,9 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/WangWilly/xSync/internal/utils"
 	"github.com/go-resty/resty/v2"
 	log "github.com/sirupsen/logrus"
-	"github.com/unkmonster/tmd/internal/utils"
 )
 
 ////////////////////////////////////////////////////////////////////////////////

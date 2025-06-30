@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/WangWilly/xSync/internal/database"
+	"github.com/WangWilly/xSync/internal/twitter"
+	"github.com/WangWilly/xSync/internal/utils"
 	"github.com/jmoiron/sqlx"
-	"github.com/unkmonster/tmd/internal/database"
-	"github.com/unkmonster/tmd/internal/twitter"
-	"github.com/unkmonster/tmd/internal/utils"
 )
 
 var db *sqlx.DB

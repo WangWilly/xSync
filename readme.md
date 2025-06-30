@@ -1,9 +1,9 @@
 # Twitter Media Downloader
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/unkmonster/tmd.svg)](https://pkg.go.dev/github.com/unkmonster/tmd)
-[![Go Report Card](https://goreportcard.com/badge/github.com/unkmonster/tmd)](https://goreportcard.com/report/github.com/unkmonster/tmd)
+[![Go Reference](https://pkg.go.dev/badge/github.com/WangWilly/xSync.svg)](https://pkg.go.dev/github.com/WangWilly/xSync)
+[![Go Report Card](https://goreportcard.com/badge/github.com/WangWilly/xSync)](https://goreportcard.com/report/github.com/WangWilly/xSync)
 [![Coverage Status](https://coveralls.io/repos/github/unkmonster/tmd/badge.svg?branch=master)](https://coveralls.io/github/unkmonster/tmd?branch=master)
-[![Go](https://github.com/unkmonster/tmd/actions/workflows/go.yml/badge.svg)](https://github.com/unkmonster/tmd/actions/workflows/go.yml)
+[![Go](https://github.com/WangWilly/xSync/actions/workflows/go.yml/badge.svg)](https://github.com/WangWilly/xSync/actions/workflows/go.yml)
 ![GitHub Release](https://img.shields.io/github/v/release/unkmonster/tmd) 
 ![GitHub License](https://img.shields.io/github/license/unkmonster/tmd?logo=github)
 
@@ -34,13 +34,13 @@
 
 **直接下载**
 
-前往 [Release](https://github.com/unkmonster/tmd/releases/latest) 自行选择合适的版本并下载
+前往 [Release](https://github.com/WangWilly/xSync/releases/latest) 自行选择合适的版本并下载
 
 **自行编译**
 
 ```bash
-git clone https://github.com/unkmonster/tmd
-cd tmd
+git clone https://github.com/WangWilly/xSync
+cd xSync
 go build .
 ```
 
@@ -51,49 +51,49 @@ go build .
 #### 配置项介绍
 
 1. `storeage path`：存储路径(可以不存在)
-2. `auth_token`：用于登录，[获取方式](https://github.com/unkmonster/tmd/blob/master/doc/help.md#获取-cookie)
-3. `ct0`：用于登录，[获取方式](https://github.com/unkmonster/tmd/blob/master/doc/help.md#获取-cookie)
+2. `auth_token`：用于登录，[获取方式](https://github.com/WangWilly/xSync/blob/master/doc/help.md#获取-cookie)
+3. `ct0`：用于登录，[获取方式](https://github.com/WangWilly/xSync/blob/master/doc/help.md#获取-cookie)
 4. `max_download_routine`：最大并发下载协程数（如果为0取默认值）
 
 #### 更新配置
 
 ```shell
-tmd --conf
+xSync --conf
 ```
 
-> **执行上述命令将导致引导配置程序重新运行，这将重新配置整个配置文件，而不是单独的配置项。单独修改配置项**请至 `%appdata%/.tmd2/conf.yaml` 或 `$HOME/.tmd2/conf.yaml`手动修改
+> **执行上述命令将导致引导配置程序重新运行，这将重新配置整个配置文件，而不是单独的配置项。单独修改配置项**请至 `%appdata%/.x_sync/conf.yaml` 或 `$HOME/.x_sync/conf.yaml`手动修改
 
 ### 命令说明
 
 ```
-tmd --help                 // 显示帮助
-tmd --conf                 // 重新运行配置程序
-tmd --user <user_id>       // 下载由 user_id 指定的用户的推文
-tmd --user <screen_name>   // 下载由 screen_name 指定的用户的推文
-tmd --list <list_id>       // 批量下载由 list_id 指定的列表中的每个用户
-tmd --foll <user_id>       // 批量下载由 user_id 指定的用户正关注的每个用户
-tmd --foll <screen_name>   // 批量下载由 screen_name 指定的用户正关注的每个用户
-tmd --auto-follow          // 自动关注受保护的用户
-tmd --no-retry             // 仅转储，不在程序退出前自动重试下载失败的推文
+xSync --help                 // 显示帮助
+xSync --conf                 // 重新运行配置程序
+xSync --user <user_id>       // 下载由 user_id 指定的用户的推文
+xSync --user <screen_name>   // 下载由 screen_name 指定的用户的推文
+xSync --list <list_id>       // 批量下载由 list_id 指定的列表中的每个用户
+xSync --foll <user_id>       // 批量下载由 user_id 指定的用户正关注的每个用户
+xSync --foll <screen_name>   // 批量下载由 screen_name 指定的用户正关注的每个用户
+xSync --auto-follow          // 自动关注受保护的用户
+xSync --no-retry             // 仅转储，不在程序退出前自动重试下载失败的推文
 ```
 
 > 为了创建符号链接，在 Windows 上应该以管理员身份运行程序
 
-[不知道啥是 user_id/list_id/screen_name?](https://github.com/unkmonster/tmd/blob/master/doc/help.md#%E8%8E%B7%E5%8F%96-list_id-user_id-screen_name)
+[不知道啥是 user_id/list_id/screen_name?](https://github.com/WangWilly/xSync/blob/master/doc/help.md#%E8%8E%B7%E5%8F%96-list_id-user_id-screen_name)
 
 ### 示例
 
 ```
-tmd --user elonmusk  // 下载 screen_name 为 ‘eronmusk’ 的用户
-tmd --user 1234567   // 下载 user_id 为 1234567 的用户
-tmd --list 8901234   // 下载 list_id 为 8901234 的列表
-tmd --foll 567890    // 下载 user_id 为 567890 的用户正关注的所有用户
+xSync --user elonmusk  // 下载 screen_name 为 ‘eronmusk’ 的用户
+xSync --user 1234567   // 下载 user_id 为 1234567 的用户
+xSync --list 8901234   // 下载 list_id 为 8901234 的列表
+xSync --foll 567890    // 下载 user_id 为 567890 的用户正关注的所有用户
 ```
 
 更推荐的做法：一次运行
 
 ```shell
-tmd --user elonmusk --user 1234567 --list 8901234 --foll 567890
+xSync --user elonmusk --user 1234567 --list 8901234 --foll 567890
 ```
 
 ### 设置代理
@@ -109,7 +109,7 @@ set HTTPS_PROXY=url
 ```bash
 set HTTP_PROXY=http://127.0.0.1:7890
 set HTTPS_PROXY=http://127.0.0.1:7890
-tmd --user elonmusk
+xSync --user elonmusk
 ```
 
 如果你使用windows系统，在powershell中使用以下指令设置代理：
@@ -126,7 +126,7 @@ $Env:HTTPS_PROXY="http://127.0.0.1:7890"
 
 程序动态从所有可用 cookie 中选择一个不会被速率限制的 cookie 请求用户推文，以避免因单一 cookie 的速率限制导致程序被阻塞。
 
-按如下格式创建 `$HOME/.tmd2/additional_cookies.yaml` 或 `%appdata%/.tmd2/additional_cookies.yaml`
+按如下格式创建 `$HOME/.x_sync/additional_cookies.yaml` 或 `%appdata%/.x_sync/additional_cookies.yaml`
 
 ```yaml
 - auth_token: xxxxxxxxx1
@@ -143,10 +143,6 @@ $Env:HTTPS_PROXY="http://127.0.0.1:7890"
 ### 关于速率限制
 
 Twitter API 限制一段时间内过快的请求 （例如某端点每15分钟仅允许请求500次，超出这个次数会以429响应），当某一端点将要达到速率限制程序会打印一条通知并阻塞尝试请求这个端点的协程直到余量刷新（这最多是15分钟），但并不会阻塞所有协程，所以其余协程打印的消息可能将这条休眠通知覆盖让人认为程序无响应了，等待余量刷新程序会继续工作。
-
-## Contributors
-
-![](https://contrib.rocks/image?repo=unkmonster/tmd) 
 
 ## 交流群
 

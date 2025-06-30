@@ -1,7 +1,7 @@
-# TMD Project Refactoring Summary
+# xSync Project Refactoring Summary
 
 ## Overview
-This document outlines the comprehensive refactoring performed on the TMD (Twitter Media Downloader) project. The refactoring focused on organizing structs into their appropriate packages and adding clear separators between different functional blocks.
+This document outlines the comprehensive refactoring performed on the xSync project. The refactoring focused on organizing structs into their appropriate packages and adding clear separators between different functional blocks.
 
 ## Refactoring Changes
 
@@ -110,7 +110,7 @@ Imports are now clearly organized and only include necessary dependencies for ea
 
 - **Standard library imports** (context, fmt, os, etc.)
 - **Third-party library imports** (github.com/go-resty/resty/v2, etc.)
-- **Internal package imports** (github.com/unkmonster/tmd/internal/*)
+- **Internal package imports** (github.com/WangWilly/xSync/internal/*)
 
 ## Benefits of Refactoring
 

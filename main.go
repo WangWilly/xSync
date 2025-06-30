@@ -12,19 +12,19 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/WangWilly/xSync/internal/cli"
+	"github.com/WangWilly/xSync/internal/config"
+	"github.com/WangWilly/xSync/internal/database"
+	"github.com/WangWilly/xSync/internal/downloading"
+	"github.com/WangWilly/xSync/internal/logger"
+	"github.com/WangWilly/xSync/internal/storage"
+	"github.com/WangWilly/xSync/internal/tasks"
+	"github.com/WangWilly/xSync/internal/twitter"
+	"github.com/WangWilly/xSync/internal/utils"
 	"github.com/go-resty/resty/v2"
 	"github.com/gookit/color"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
-	"github.com/unkmonster/tmd/internal/cli"
-	"github.com/unkmonster/tmd/internal/config"
-	"github.com/unkmonster/tmd/internal/database"
-	"github.com/unkmonster/tmd/internal/downloading"
-	"github.com/unkmonster/tmd/internal/logger"
-	"github.com/unkmonster/tmd/internal/storage"
-	"github.com/unkmonster/tmd/internal/tasks"
-	"github.com/unkmonster/tmd/internal/twitter"
-	"github.com/unkmonster/tmd/internal/utils"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -69,10 +69,10 @@ func main() {
 		panic("failed to get home path from env")
 	}
 
-	appRootPath := filepath.Join(homepath, ".tmd2")
+	appRootPath := filepath.Join(homepath, ".x_sync")
 	confPath := filepath.Join(appRootPath, "conf.yaml")
 	cliLogPath := filepath.Join(appRootPath, "client.log")
-	logPath := filepath.Join(appRootPath, "tmd2.log")
+	logPath := filepath.Join(appRootPath, "x_sync.log")
 	additionalCookiesPath := filepath.Join(appRootPath, "additional_cookies.yaml")
 	if err = os.MkdirAll(appRootPath, 0755); err != nil {
 		log.Fatalln("failed to make app dir", err)

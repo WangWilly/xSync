@@ -1,4 +1,4 @@
-module github.com/unkmonster/tmd
+module github.com/WangWilly/xSync
 
 go 1.22.3
 

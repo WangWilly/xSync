@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/WangWilly/xSync/internal/twitter"
 	"github.com/go-resty/resty/v2"
-	"github.com/unkmonster/tmd/internal/twitter"
 )
 
 ////////////////////////////////////////////////////////////////////////////////

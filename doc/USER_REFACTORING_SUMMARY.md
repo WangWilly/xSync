@@ -1,4 +1,4 @@
-# TMD User.go Refactoring Summary
+# xSync User.go Refactoring Summary
 
 ## Overview
 This document outlines the comprehensive refactoring performed on the `internal/twitter/user.go` file. The refactoring focused on organizing types, constants, and functions into logical categories with clear separators between different functional blocks.

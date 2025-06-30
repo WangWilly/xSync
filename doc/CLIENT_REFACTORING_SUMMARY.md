@@ -1,4 +1,4 @@
-# TMD Client.go Refactoring Summary
+# xSync Client.go Refactoring Summary
 
 ## Overview
 This document outlines the comprehensive refactoring performed on the `internal/twitter/client.go` file. The refactoring focused on organizing constants, variables, structs, and functions into logical categories with clear separators between different functional blocks.

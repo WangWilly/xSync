@@ -1,4 +1,4 @@
-# TMD Features.go Refactoring Summary
+# xSync Features.go Refactoring Summary
 
 ## Overview
 This document outlines the comprehensive refactoring performed on the `internal/downloading/features.go` file. The refactoring focused on organizing structs, constants, variables, and functions into logical categories with clear separators between different functional blocks.
@@ -173,4 +173,4 @@ This refactoring significantly improves the maintainability and readability of t
 4. **Test components** - Isolated functionality sections
 5. **Review code** - Logical organization supports code review process
 
-The refactored `features.go` file now serves as a well-organized foundation for the TMD download system.
+The refactored `features.go` file now serves as a well-organized foundation for the xSync download system.

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/WangWilly/xSync/internal/utils"
 	"github.com/go-resty/resty/v2"
-	"github.com/unkmonster/tmd/internal/utils"
 )
 
 var client *resty.Client

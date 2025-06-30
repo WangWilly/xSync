@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/WangWilly/xSync/internal/utils"
 	"github.com/go-resty/resty/v2"
 	"github.com/tidwall/gjson"
-	"github.com/unkmonster/tmd/internal/utils"
 )
 
 ////////////////////////////////////////////////////////////////////////////////

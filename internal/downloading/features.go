@@ -11,14 +11,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/WangWilly/xSync/internal/database"
+	"github.com/WangWilly/xSync/internal/twitter"
+	"github.com/WangWilly/xSync/internal/utils"
 	"github.com/go-resty/resty/v2"
 	"github.com/gookit/color"
 	"github.com/jmoiron/sqlx"
 	"github.com/panjf2000/ants/v2"
 	log "github.com/sirupsen/logrus"
-	"github.com/unkmonster/tmd/internal/database"
-	"github.com/unkmonster/tmd/internal/twitter"
-	"github.com/unkmonster/tmd/internal/utils"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
