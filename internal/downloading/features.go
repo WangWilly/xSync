@@ -21,11 +21,17 @@ import (
 	"github.com/unkmonster/tmd/internal/utils"
 )
 
+////////////////////////////////////////////////////////////////////////////////
+// Interfaces and Core Types
+////////////////////////////////////////////////////////////////////////////////
+
+// PackgedTweet represents a tweet with its associated download path
 type PackgedTweet interface {
 	GetTweet() *twitter.Tweet
 	GetPath() string
 }
 
+// TweetInDir represents a tweet with a specific directory path
 type TweetInDir struct {
 	tweet *twitter.Tweet
 	path  string
@@ -39,8 +45,65 @@ func (pt TweetInDir) GetPath() string {
 	return pt.path
 }
 
-var mutex sync.Mutex
+// TweetInEntity represents a tweet associated with a user entity
+type TweetInEntity struct {
+	Tweet  *twitter.Tweet
+	Entity *UserEntity
+}
 
+func (pt TweetInEntity) GetTweet() *twitter.Tweet {
+	return pt.Tweet
+}
+
+func (pt TweetInEntity) GetPath() string {
+	path, err := pt.Entity.Path()
+	if err != nil {
+		return ""
+	}
+	return path
+}
+
+// userInLstEntity represents a user within a list entity context
+type userInLstEntity struct {
+	user *twitter.User
+	leid *int
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Configuration and Global State
+////////////////////////////////////////////////////////////////////////////////
+
+// Download configuration constants
+const (
+	userTweetRateLimit     = 500
+	userTweetMaxConcurrent = 100 // avoid DownstreamOverCapacityError
+)
+
+// Global state variables
+var (
+	mutex              sync.Mutex
+	MaxDownloadRoutine int
+	syncedUsers        sync.Map // map[user_id]*UserEntity - tracks synced users for current run
+	syncedListUsers    sync.Map // leid -> uid -> struct{} - tracks synced list users
+)
+
+// workerConfig holds configuration for download workers
+type workerConfig struct {
+	ctx    context.Context
+	wg     *sync.WaitGroup
+	cancel context.CancelCauseFunc
+}
+
+// init initializes default configuration values
+func init() {
+	MaxDownloadRoutine = min(100, runtime.GOMAXPROCS(0)*10)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Tweet Media Download Operations
+////////////////////////////////////////////////////////////////////////////////
+
+// downloadTweetMedia downloads all media files for a given tweet
 // 任何一个 url 下载失败直接返回
 // TODO: 要么全做，要么不做
 func downloadTweetMedia(ctx context.Context, client *resty.Client, dir string, tweet *twitter.Tweet) error {
@@ -83,21 +146,11 @@ func downloadTweetMedia(ctx context.Context, client *resty.Client, dir string, t
 	return nil
 }
 
-var MaxDownloadRoutine int
+////////////////////////////////////////////////////////////////////////////////
+// Download Worker Operations
+////////////////////////////////////////////////////////////////////////////////
 
-// map[user_id]*UserEntity 记录本次程序运行已同步过的用户
-var syncedUsers sync.Map
-
-func init() {
-	MaxDownloadRoutine = min(100, runtime.GOMAXPROCS(0)*10)
-}
-
-type workerConfig struct {
-	ctx    context.Context
-	wg     *sync.WaitGroup
-	cancel context.CancelCauseFunc
-}
-
+// tweetDownloader handles downloading of tweets from a channel
 // 负责下载推文，保证 tweet chan 内的推文要么下载成功，要么推送至 error chan
 func tweetDownloader(client *resty.Client, config *workerConfig, errch chan<- PackgedTweet, twech <-chan PackgedTweet) {
 	var pt PackgedTweet
@@ -150,6 +203,11 @@ func tweetDownloader(client *resty.Client, config *workerConfig, errch chan<- Pa
 	}
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Batch Download Operations
+////////////////////////////////////////////////////////////////////////////////
+
+// BatchDownloadTweet downloads multiple tweets in parallel and returns failed downloads
 // 批量下载推文并返回下载失败的推文，可以保证推文被成功下载或被返回
 func BatchDownloadTweet(ctx context.Context, client *resty.Client, pts ...PackgedTweet) []PackgedTweet {
 	if len(pts) == 0 {
@@ -190,6 +248,11 @@ func BatchDownloadTweet(ctx context.Context, client *resty.Client, pts ...Packge
 	return errors
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// User and Entity Synchronization
+////////////////////////////////////////////////////////////////////////////////
+
+// syncUser updates the database record for a user
 // 更新数据库中对用户的记录
 func syncUser(db *sqlx.DB, user *twitter.User) error {
 	renamed := false
@@ -242,29 +305,11 @@ func syncUserAndEntity(db *sqlx.DB, user *twitter.User, dir string) (*UserEntity
 	return entity, nil
 }
 
-type TweetInEntity struct {
-	Tweet  *twitter.Tweet
-	Entity *UserEntity
-}
+////////////////////////////////////////////////////////////////////////////////
+// Utility Functions
+////////////////////////////////////////////////////////////////////////////////
 
-func (pt TweetInEntity) GetTweet() *twitter.Tweet {
-	return pt.Tweet
-}
-
-func (pt TweetInEntity) GetPath() string {
-	path, err := pt.Entity.Path()
-	if err != nil {
-		return ""
-	}
-	return path
-}
-
-const userTweetRateLimit = 500
-const userTweetMaxConcurrent = 100 // avoid DownstreamOverCapacityError
-
-// var syncedListUsers = make(map[uint64]map[int64]struct{})
-var syncedListUsers sync.Map //leid -> uid -> struct{}
-
+// calcUserDepth calculates how many timeline requests are needed to get all user tweets
 // 需要请求多少次时间线才能获取完毕用户的推文？
 func calcUserDepth(exist int, total int) int {
 	if exist >= total {
@@ -282,14 +327,14 @@ func calcUserDepth(exist int, total int) int {
 	return depth
 }
 
-type userInLstEntity struct {
-	user *twitter.User
-	leid *int
-}
-
+// shouldIngoreUser checks if a user should be ignored during processing
 func shouldIngoreUser(user *twitter.User) bool {
 	return user.Blocking || user.Muting
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Batch User Download Operations
+////////////////////////////////////////////////////////////////////////////////
 
 func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, users []userInLstEntity, dir string, autoFollow bool, additional []*resty.Client) ([]*TweetInEntity, error) {
 	if len(users) == 0 {
@@ -580,6 +625,11 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 	return fails, context.Cause(ctx)
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// List Management Operations
+////////////////////////////////////////////////////////////////////////////////
+
+// syncList updates the database record for a list
 func syncList(db *sqlx.DB, list *twitter.List) error {
 	listdb, err := database.GetLst(db, list.Id)
 	if err != nil {
@@ -623,6 +673,11 @@ func syncLstAndGetMembers(ctx context.Context, client *resty.Client, db *sqlx.DB
 	return packgedUsers, nil
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Main Batch Download Orchestration
+////////////////////////////////////////////////////////////////////////////////
+
+// BatchDownloadAny orchestrates the complete download process for lists and users
 func BatchDownloadAny(ctx context.Context, client *resty.Client, db *sqlx.DB, lists []twitter.ListBase, users []*twitter.User, dir string, realDir string, autoFollow bool, additional []*resty.Client) ([]*TweetInEntity, error) {
 	log.Debugln("start collecting users")
 	packgedUsers := make([]userInLstEntity, 0)

@@ -10,26 +10,37 @@ import (
 	"github.com/unkmonster/tmd/internal/utils"
 )
 
+////////////////////////////////////////////////////////////////////////////////
+// Types and Constants
+////////////////////////////////////////////////////////////////////////////////
+
+// FollowState represents the follow relationship state between users
 type FollowState int
 
 const (
-	FS_UNFOLLOW FollowState = iota
-	FS_FOLLOWING
-	FS_REQUESTED
+	FS_UNFOLLOW  FollowState = iota // Not following the user
+	FS_FOLLOWING                    // Currently following the user
+	FS_REQUESTED                    // Follow request sent but not yet approved
 )
 
+// User represents a Twitter user with their profile information and relationship status
 type User struct {
-	Id           uint64
-	Name         string
-	ScreenName   string
-	IsProtected  bool
-	FriendsCount int
-	Followstate  FollowState
-	MediaCount   int
-	Muting       bool
-	Blocking     bool
+	Id           uint64      // User's unique identifier
+	Name         string      // Display name
+	ScreenName   string      // Username (handle)
+	IsProtected  bool        // Whether the account is protected/private
+	FriendsCount int         // Number of accounts this user follows
+	Followstate  FollowState // Current follow relationship status
+	MediaCount   int         // Number of media posts by this user
+	Muting       bool        // Whether this user is muted
+	Blocking     bool        // Whether this user is blocked
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// User Retrieval Operations
+////////////////////////////////////////////////////////////////////////////////
+
+// GetUserById retrieves a user by their unique ID
 func GetUserById(ctx context.Context, client *resty.Client, id uint64) (*User, error) {
 	api := userByRestId{id}
 	getUrl := makeUrl(&api)
@@ -40,6 +51,7 @@ func GetUserById(ctx context.Context, client *resty.Client, id uint64) (*User, e
 	return r, err
 }
 
+// GetUserByScreenName retrieves a user by their screen name (username)
 func GetUserByScreenName(ctx context.Context, client *resty.Client, screenName string) (*User, error) {
 	u := makeUrl(&userByScreenName{screenName: screenName})
 	r, err := getUser(ctx, client, u)
@@ -49,6 +61,7 @@ func GetUserByScreenName(ctx context.Context, client *resty.Client, screenName s
 	return r, err
 }
 
+// getUser is a low-level function that makes the HTTP request to get user data
 func getUser(ctx context.Context, client *resty.Client, url string) (*User, error) {
 	resp, err := client.R().SetContext(ctx).Get(url)
 	if err != nil {
@@ -57,6 +70,11 @@ func getUser(ctx context.Context, client *resty.Client, url string) (*User, erro
 	return parseRespJson(resp.Body())
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// JSON Parsing and Data Processing
+////////////////////////////////////////////////////////////////////////////////
+
+// parseUserResults parses the user data from Twitter API JSON response
 func parseUserResults(user_results *gjson.Result) (*User, error) {
 	result := user_results.Get("result")
 	if result.Get("__typename").String() == "UserUnavailable" {
@@ -97,6 +115,7 @@ func parseUserResults(user_results *gjson.Result) (*User, error) {
 	return &usr, nil
 }
 
+// parseRespJson parses the top-level JSON response to extract user data
 func parseRespJson(resp []byte) (*User, error) {
 	user := gjson.GetBytes(resp, "data.user")
 	if !user.Exists() {
@@ -105,10 +124,7 @@ func parseRespJson(resp []byte) (*User, error) {
 	return parseUserResults(&user)
 }
 
-func (u *User) IsVisiable() bool {
-	return u.Followstate == FS_FOLLOWING || !u.IsProtected
-}
-
+// itemContentsToTweets converts timeline item contents to Tweet objects
 func itemContentsToTweets(itemContents []gjson.Result) []*Tweet {
 	res := make([]*Tweet, 0, len(itemContents))
 	for _, itemContent := range itemContents {
@@ -120,6 +136,16 @@ func itemContentsToTweets(itemContents []gjson.Result) []*Tweet {
 	return res
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// User Media Operations
+////////////////////////////////////////////////////////////////////////////////
+
+// IsVisiable checks if the user's content is visible (either following or public account)
+func (u *User) IsVisiable() bool {
+	return u.Followstate == FS_FOLLOWING || !u.IsProtected
+}
+
+// getMediasOnePage retrieves one page of media tweets for the user
 func (u *User) getMediasOnePage(ctx context.Context, api *userMedia, client *resty.Client) ([]*Tweet, string, error) {
 	if !u.IsVisiable() {
 		return nil, "", nil
@@ -129,6 +155,7 @@ func (u *User) getMediasOnePage(ctx context.Context, api *userMedia, client *res
 	return itemContentsToTweets(itemContents), next, err
 }
 
+// filterTweetsByTimeRange filters tweets by time range from a reverse-ordered slice
 // 在逆序切片中，筛选出在 timerange 范围内的推文
 func filterTweetsByTimeRange(tweets []*Tweet, min *time.Time, max *time.Time) (cutMin bool, cutMax bool, res []*Tweet) {
 	n := len(tweets)
@@ -165,6 +192,7 @@ func filterTweetsByTimeRange(tweets []*Tweet, min *time.Time, max *time.Time) (c
 	return
 }
 
+// GetMeidas retrieves all media tweets for the user within an optional time range
 func (u *User) GetMeidas(ctx context.Context, client *resty.Client, timeRange *utils.TimeRange) ([]*Tweet, error) {
 	if !u.IsVisiable() {
 		return nil, nil
@@ -216,14 +244,21 @@ func (u *User) GetMeidas(ctx context.Context, client *resty.Client, timeRange *u
 	return results, nil
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Utility and Helper Functions
+////////////////////////////////////////////////////////////////////////////////
+
+// Title returns a formatted string with the user's display name and screen name
 func (u *User) Title() string {
 	return fmt.Sprintf("%s(%s)", u.Name, u.ScreenName)
 }
 
+// Following returns a UserFollowing interface for this user
 func (u *User) Following() UserFollowing {
 	return UserFollowing{u}
 }
 
+// FollowUser sends a follow request to the specified user
 func FollowUser(ctx context.Context, client *resty.Client, user *User) error {
 	url := "https://x.com/i/api/1.1/friendships/create.json"
 	_, err := client.R().SetFormData(map[string]string{

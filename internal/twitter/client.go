@@ -18,13 +18,35 @@ import (
 	"github.com/unkmonster/tmd/internal/utils"
 )
 
+////////////////////////////////////////////////////////////////////////////////
+// Constants and Global State
+////////////////////////////////////////////////////////////////////////////////
+
+// Twitter API Bearer Token
 const bearer = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA"
 
-var clientScreenNames sync.Map
-var clientErrors sync.Map
-var clientRateLimiters sync.Map
-var apiCounts sync.Map
+// Global client state tracking
+var (
+	clientScreenNames  sync.Map                 // map[*resty.Client]string - tracks client screen names
+	clientErrors       sync.Map                 // map[*resty.Client]error - tracks client errors
+	clientRateLimiters sync.Map                 // map[*resty.Client]*rateLimiter - tracks client rate limiters
+	apiCounts          sync.Map                 // map[string]*atomic.Int32 - tracks API call counts
+	showStateToken     = make(chan struct{}, 1) // token for rate limit state display
+)
 
+// Error definitions
+var (
+	ErrWouldBlock = fmt.Errorf("EWOULDBLOCK")
+)
+
+// Screen name extraction pattern
+var screenNamePattern = regexp.MustCompile(`"screen_name":"(\S+?)"`)
+
+////////////////////////////////////////////////////////////////////////////////
+// Client Authentication and Configuration
+////////////////////////////////////////////////////////////////////////////////
+
+// SetClientAuth configures authentication for a Twitter API client
 func SetClientAuth(client *resty.Client, authToken string, ct0 string) {
 	client.SetAuthToken(bearer)
 	client.SetCookie(&http.Cookie{
@@ -38,6 +60,7 @@ func SetClientAuth(client *resty.Client, authToken string, ct0 string) {
 	client.SetHeader("X-Csrf-Token", ct0)
 }
 
+// Login creates and configures a new authenticated Twitter API client
 func Login(ctx context.Context, authToken string, ct0 string) (*resty.Client, string, error) {
 	client := resty.New()
 
@@ -95,15 +118,42 @@ func Login(ctx context.Context, authToken string, ct0 string) (*resty.Client, st
 	return client, screenName, nil
 }
 
-func GetClientScreenName(client *resty.Client) string {
-	if v, ok := clientScreenNames.Load(client); ok {
-		return v.(string)
+// GetSelfScreenName extracts the screen name from Twitter's home page
+func GetSelfScreenName(ctx context.Context, client *resty.Client) (string, error) {
+	// 移除 Authorization 头，否则 401
+	client = client.Clone()
+	client.SetAuthToken("")
+
+	// U-A 是必须的，否则 400
+	req := client.R().SetContext(ctx).SetHeaders(map[string]string{
+		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+	})
+	resp, err := req.Get("https://x.com/home")
+
+	if err != nil {
+		return "", err
 	}
-	return ""
+	if err := utils.CheckRespStatus(resp); err != nil {
+		return "", err
+	}
+	sname := extractScreenNameFromHome(resp.Body())
+	return sname, nil
 }
 
-var ErrWouldBlock = fmt.Errorf("EWOULDBLOCK")
+// extractScreenNameFromHome extracts screen name from home page HTML
+func extractScreenNameFromHome(home []byte) string {
+	subs := screenNamePattern.FindStringSubmatch(string(home))
+	if len(subs) == 0 {
+		return ""
+	}
+	return subs[1]
+}
 
+////////////////////////////////////////////////////////////////////////////////
+// Rate Limiting Structures and Logic
+////////////////////////////////////////////////////////////////////////////////
+
+// xRateLimit represents Twitter API rate limit information for a specific endpoint
 type xRateLimit struct {
 	ResetTime time.Time
 	Remaining int
@@ -113,17 +163,20 @@ type xRateLimit struct {
 	Mtx       sync.Mutex
 }
 
+// _wouldBlock checks if making a request would trigger rate limiting (internal, not thread-safe)
 func (rl *xRateLimit) _wouldBlock() bool {
 	threshold := max(2*rl.Limit/100, 1)
 	return rl.Remaining <= threshold && time.Now().Before(rl.ResetTime)
 }
 
+// wouldBlock checks if making a request would trigger rate limiting (thread-safe)
 func (rl *xRateLimit) wouldBlock() bool {
 	rl.Mtx.Lock()
 	defer rl.Mtx.Unlock()
 	return rl._wouldBlock()
 }
 
+// preRequest handles rate limiting logic before making a request
 func (rl *xRateLimit) preRequest(ctx context.Context, nonBlocking bool) error {
 	rl.Mtx.Lock()
 	defer rl.Mtx.Unlock()
@@ -171,6 +224,7 @@ func (rl *xRateLimit) preRequest(ctx context.Context, nonBlocking bool) error {
 	}
 }
 
+// makeRateLimit creates a rate limit from HTTP response headers
 // 必须返回 nil 或就绪的 rateLimit，否则死锁
 func makeRateLimit(resp *resty.Response) *xRateLimit {
 	header := resp.Header()
@@ -213,6 +267,7 @@ func makeRateLimit(resp *resty.Response) *xRateLimit {
 	}
 }
 
+// rateLimiter manages rate limiting for multiple API endpoints
 type rateLimiter struct {
 	limits      sync.Map
 	conds       sync.Map
@@ -307,6 +362,7 @@ func (*rateLimiter) shouldWork(url *url.URL) bool {
 	return !strings.HasSuffix(url.Host, "twimg.com")
 }
 
+// wouldBlock checks if a request to the given path would block due to rate limiting
 func (rl *rateLimiter) wouldBlock(path string) bool {
 	if v, ok := rl.limits.Load(path); ok {
 		return v.(*xRateLimit) != nil && v.(*xRateLimit).wouldBlock()
@@ -314,6 +370,43 @@ func (rl *rateLimiter) wouldBlock(path string) bool {
 	return false
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Client Management Operations
+////////////////////////////////////////////////////////////////////////////////
+
+// GetClientScreenName retrieves the screen name associated with a client
+func GetClientScreenName(client *resty.Client) string {
+	if v, ok := clientScreenNames.Load(client); ok {
+		return v.(string)
+	}
+	return ""
+}
+
+// GetClientError retrieves any error associated with a client
+func GetClientError(cli *resty.Client) error {
+	if v, ok := clientErrors.Load(cli); ok {
+		return v.(error)
+	}
+	return nil
+}
+
+// SetClientError sets an error for a client, marking it as unavailable
+func SetClientError(cli *resty.Client, err error) {
+	clientErrors.Store(cli, err)
+	if err != nil {
+		log.WithField("client", GetClientScreenName(cli)).Debugln("client is no longer available:", err)
+	}
+}
+
+// GetClientRateLimiter retrieves the rate limiter associated with a client
+func GetClientRateLimiter(cli *resty.Client) *rateLimiter {
+	if v, ok := clientRateLimiters.Load(cli); ok {
+		return v.(*rateLimiter)
+	}
+	return nil
+}
+
+// EnableRateLimit enables rate limiting for a client
 func EnableRateLimit(client *resty.Client) {
 	rateLimiter := newRateLimiter(true)
 	clientRateLimiters.Store(client, &rateLimiter)
@@ -354,6 +447,7 @@ func EnableRateLimit(client *resty.Client) {
 	})
 }
 
+// EnableRequestCounting enables API request counting for debugging
 func EnableRequestCounting(client *resty.Client) {
 	client.OnBeforeRequest(func(c *resty.Client, req *resty.Request) error {
 		url, err := url.Parse(req.URL)
@@ -371,6 +465,7 @@ func EnableRequestCounting(client *resty.Client) {
 	})
 }
 
+// ReportRequestCount reports API request counts for debugging
 func ReportRequestCount() {
 	apiCounts.Range(func(key, value any) bool {
 		log.Debugf("* %s request count: %d", key, value.(*atomic.Int32).Load())
@@ -378,60 +473,11 @@ func ReportRequestCount() {
 	})
 }
 
-var screenNamePattern = regexp.MustCompile(`"screen_name":"(\S+?)"`)
+////////////////////////////////////////////////////////////////////////////////
+// Client Selection and Utilities
+////////////////////////////////////////////////////////////////////////////////
 
-func extractScreenNameFromHome(home []byte) string {
-	subs := screenNamePattern.FindStringSubmatch(string(home))
-	if len(subs) == 0 {
-		return ""
-	}
-	return subs[1]
-}
-
-func GetSelfScreenName(ctx context.Context, client *resty.Client) (string, error) {
-	// 移除 Authorization 头，否则 401
-	client = client.Clone()
-	client.SetAuthToken("")
-
-	// U-A 是必须的，否则 400
-	req := client.R().SetContext(ctx).SetHeaders(map[string]string{
-		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-	})
-	resp, err := req.Get("https://x.com/home")
-
-	if err != nil {
-		return "", err
-	}
-	if err := utils.CheckRespStatus(resp); err != nil {
-		return "", err
-	}
-	sname := extractScreenNameFromHome(resp.Body())
-	return sname, nil
-}
-
-func GetClientError(cli *resty.Client) error {
-	if v, ok := clientErrors.Load(cli); ok {
-		return v.(error)
-	}
-	return nil
-}
-
-func SetClientError(cli *resty.Client, err error) {
-	clientErrors.Store(cli, err)
-	if err != nil {
-		log.WithField("client", GetClientScreenName(cli)).Debugln("client is no longer available:", err)
-	}
-}
-
-func GetClientRateLimiter(cli *resty.Client) *rateLimiter {
-	if v, ok := clientRateLimiters.Load(cli); ok {
-		return v.(*rateLimiter)
-	}
-	return nil
-}
-
-var showStateToken = make(chan struct{}, 1)
-
+// SelectClient selects an available client that won't block for the given path
 // 选择一个请求指定端点不会阻塞的客户端
 func SelectClient(ctx context.Context, clients []*resty.Client, path string) *resty.Client {
 	for ctx.Err() == nil {
@@ -474,6 +520,7 @@ func SelectClient(ctx context.Context, clients []*resty.Client, path string) *re
 	return nil
 }
 
+// SelectUserMediaClient selects a client suitable for user media requests
 func SelectUserMediaClient(ctx context.Context, clients []*resty.Client) *resty.Client {
 	return SelectClient(ctx, clients, (&userMedia{}).Path())
 }
