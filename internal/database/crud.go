@@ -135,15 +135,15 @@ func DelUserEntity(db *sqlx.DB, id uint32) error {
 	return err
 }
 
-func LocateUserEntity(db *sqlx.DB, uid uint64, parentDIr string) (*UserEntity, error) {
-	parentDIr, err := filepath.Abs(parentDIr)
+func GetUserEntity(db *sqlx.DB, uid uint64, parentDir string) (*UserEntity, error) {
+	parentDir, err := filepath.Abs(parentDir)
 	if err != nil {
 		return nil, err
 	}
 
 	stmt := `SELECT * FROM user_entities WHERE user_id=? AND parent_dir=?`
 	result := &UserEntity{}
-	err = db.Get(result, stmt, uid, parentDIr)
+	err = db.Get(result, stmt, uid, parentDir)
 	if err == sql.ErrNoRows {
 		err = nil
 		result = nil
@@ -151,10 +151,11 @@ func LocateUserEntity(db *sqlx.DB, uid uint64, parentDIr string) (*UserEntity, e
 	if err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }
 
-func GetUserEntity(db *sqlx.DB, id int) (*UserEntity, error) {
+func GetUserEntityById(db *sqlx.DB, id int) (*UserEntity, error) {
 	result := &UserEntity{}
 	stmt := `SELECT * FROM user_entities WHERE id=?`
 	err := db.Get(result, stmt, id)
@@ -218,7 +219,7 @@ func UpdateLst(db *sqlx.DB, lst *Lst) error {
 	return err
 }
 
-func CreateLstEntity(db *sqlx.DB, entity *LstEntity) error {
+func CreateLstEntity(db *sqlx.DB, entity *ListEntity) error {
 	abs, err := filepath.Abs(entity.ParentDir)
 	if err != nil {
 		return err
@@ -244,9 +245,9 @@ func DelLstEntity(db *sqlx.DB, id int) error {
 	return err
 }
 
-func GetLstEntity(db *sqlx.DB, id int) (*LstEntity, error) {
+func GetListEntityById(db *sqlx.DB, id int) (*ListEntity, error) {
 	stmt := `SELECT * FROM lst_entities WHERE id=?`
-	result := &LstEntity{}
+	result := &ListEntity{}
 	err := db.Get(result, stmt, id)
 	if err == sql.ErrNoRows {
 		err = nil
@@ -258,14 +259,14 @@ func GetLstEntity(db *sqlx.DB, id int) (*LstEntity, error) {
 	return result, nil
 }
 
-func LocateLstEntity(db *sqlx.DB, lid int64, parentDir string) (*LstEntity, error) {
+func GetListEntity(db *sqlx.DB, lid int64, parentDir string) (*ListEntity, error) {
 	parentDir, err := filepath.Abs(parentDir)
 	if err != nil {
 		return nil, err
 	}
 
 	stmt := `SELECT * FROM lst_entities WHERE lst_id=? AND parent_dir=?`
-	result := &LstEntity{}
+	result := &ListEntity{}
 	err = db.Get(result, stmt, lid, parentDir)
 	if err == sql.ErrNoRows {
 		err = nil
@@ -276,7 +277,8 @@ func LocateLstEntity(db *sqlx.DB, lid int64, parentDir string) (*LstEntity, erro
 	}
 	return result, nil
 }
-func UpdateLstEntity(db *sqlx.DB, entity *LstEntity) error {
+
+func UpdateLstEntity(db *sqlx.DB, entity *ListEntity) error {
 	stmt := `UPDATE lst_entities SET name=? WHERE id=?`
 	_, err := db.Exec(stmt, entity.Name, entity.Id.Int32)
 	return err

@@ -8,11 +8,20 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+////////////////////////////////////////////////////////////////////////////////
+// Constants and Timeline Types
+////////////////////////////////////////////////////////////////////////////////
+
 const (
-	timelineTweet = iota
-	timelineUser
+	timelineTweet = iota // Timeline item type for tweets
+	timelineUser         // Timeline item type for users
 )
 
+////////////////////////////////////////////////////////////////////////////////
+// JSON Response Parsing Utilities
+////////////////////////////////////////////////////////////////////////////////
+
+// getInstructions extracts instructions from Twitter API response
 func getInstructions(resp []byte, path string) gjson.Result {
 	inst := gjson.GetBytes(resp, path)
 	if !inst.Exists() {
@@ -21,6 +30,7 @@ func getInstructions(resp []byte, path string) gjson.Result {
 	return inst
 }
 
+// getEntries extracts entries from timeline instructions
 func getEntries(instructions gjson.Result) gjson.Result {
 	for _, inst := range instructions.Array() {
 		if inst.Get("type").String() == "TimelineAddEntries" {
@@ -30,6 +40,7 @@ func getEntries(instructions gjson.Result) gjson.Result {
 	return gjson.Result{}
 }
 
+// getModuleItems extracts module items from timeline instructions
 func getModuleItems(instructions gjson.Result) gjson.Result {
 	for _, inst := range instructions.Array() {
 		if inst.Get("type").String() == "TimelineAddToModule" {
@@ -39,6 +50,7 @@ func getModuleItems(instructions gjson.Result) gjson.Result {
 	return gjson.Result{}
 }
 
+// getNextCursor extracts the next cursor for pagination
 func getNextCursor(entries gjson.Result) string {
 	array := entries.Array()
 	// if len(array) == 2 {
@@ -55,6 +67,11 @@ func getNextCursor(entries gjson.Result) string {
 	panic(fmt.Sprintf("invalid entries: %s", entries.String()))
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Timeline Entry Processing
+////////////////////////////////////////////////////////////////////////////////
+
+// getItemContentFromModuleItem extracts item content from module items
 func getItemContentFromModuleItem(moduleItem gjson.Result) gjson.Result {
 	res := moduleItem.Get("item.itemContent")
 	if !res.Exists() {
@@ -63,28 +80,37 @@ func getItemContentFromModuleItem(moduleItem gjson.Result) gjson.Result {
 	return res
 }
 
+// getItemContentsFromEntry extracts item contents from timeline entries
 func getItemContentsFromEntry(entry gjson.Result) []gjson.Result {
 	content := entry.Get("content")
-	ty := content.Get("entryType").String()
-	if ty == "TimelineTimelineModule" {
+	entryType := content.Get("entryType").String()
+	switch entryType {
+	case "TimelineTimelineModule":
 		return content.Get("items.#.item.itemContent").Array()
-	} else if ty == "TimelineTimelineItem" {
+	case "TimelineTimelineItem":
 		return []gjson.Result{content.Get("itemContent")}
 	}
 
 	panic(fmt.Sprintf("invalid entry: %s", entry.String()))
 }
 
+// getResults extracts results based on item type (tweet or user)
 func getResults(itemContent gjson.Result, itemType int) gjson.Result {
-	if itemType == timelineTweet {
+	switch itemType {
+	case timelineTweet:
 		return itemContent.Get("tweet_results")
-	} else if itemType == timelineUser {
+	case timelineUser:
 		return itemContent.Get("user_results")
 	}
 
 	panic(fmt.Sprintf("invalid itemContent: %s", itemContent.String()))
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Timeline API Operations
+////////////////////////////////////////////////////////////////////////////////
+
+// getTimelineResp makes HTTP request to timeline API endpoint
 func getTimelineResp(ctx context.Context, api timelineApi, client *resty.Client) ([]byte, error) {
 	url := makeUrl(api)
 	resp, err := client.R().SetContext(ctx).Get(url)
@@ -94,6 +120,7 @@ func getTimelineResp(ctx context.Context, api timelineApi, client *resty.Client)
 	return resp.Body(), nil
 }
 
+// getTimelineItemContents retrieves timeline item contents for a single page
 // 获取时间线 API 并返回所有 itemContent 和 底部 cursor
 func getTimelineItemContents(ctx context.Context, api timelineApi, client *resty.Client, instPath string) ([]gjson.Result, string, error) {
 	resp, err := getTimelineResp(ctx, api, client)
@@ -129,6 +156,7 @@ func getTimelineItemContents(ctx context.Context, api timelineApi, client *resty
 	return itemContents, getNextCursor(entries), nil
 }
 
+// getTimelineItemContentsTillEnd retrieves all timeline item contents across multiple pages
 func getTimelineItemContentsTillEnd(ctx context.Context, api timelineApi, client *resty.Client, instPath string) ([]gjson.Result, error) {
 	res := make([]gjson.Result, 0)
 

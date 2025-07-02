@@ -21,6 +21,8 @@ type SmartPath interface {
 	Recorded() bool
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 func syncPath(path SmartPath, expectedName string) error {
 	if !path.Recorded() {
 		return path.Create(expectedName)
@@ -38,60 +40,64 @@ func syncPath(path SmartPath, expectedName string) error {
 	return os.MkdirAll(p, 0755)
 }
 
-type UserEntity struct {
+////////////////////////////////////////////////////////////////////////////////
+
+type UserSmartPath struct {
 	record  *database.UserEntity
 	db      *sqlx.DB
 	created bool
 }
 
-func NewUserEntity(db *sqlx.DB, uid uint64, parentDir string) (*UserEntity, error) {
+func NewUserSmartPath(db *sqlx.DB, uid uint64, parentDir string) (*UserSmartPath, error) {
 	created := true
-	record, err := database.LocateUserEntity(db, uid, parentDir)
+	userEntity, err := database.GetUserEntity(db, uid, parentDir)
 	if err != nil {
 		return nil, err
 	}
-	if record == nil {
-		record = &database.UserEntity{}
-		record.Uid = uid
-		record.ParentDir = parentDir
+
+	if userEntity == nil {
+		userEntity = &database.UserEntity{}
+		userEntity.Uid = uid
+		userEntity.ParentDir = parentDir
 		created = false
 	}
-	return &UserEntity{record: record, db: db, created: created}, nil
+
+	return &UserSmartPath{record: userEntity, db: db, created: created}, nil
 }
 
-func (ue *UserEntity) Create(name string) error {
-	ue.record.Name = name
-	path, _ := ue.Path()
+func (user *UserSmartPath) Create(name string) error {
+	user.record.Name = name
+	path, _ := user.Path()
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return err
 	}
 
-	if err := database.CreateUserEntity(ue.db, ue.record); err != nil {
+	if err := database.CreateUserEntity(user.db, user.record); err != nil {
 		return err
 	}
-	ue.created = true
+	user.created = true
 	return nil
 }
 
-func (ue *UserEntity) Remove() error {
-	path, _ := ue.Path()
+func (user *UserSmartPath) Remove() error {
+	path, _ := user.Path()
 
 	if err := os.RemoveAll(path); err != nil {
 		return err
 	}
-	if err := database.DelUserEntity(ue.db, uint32(ue.record.Id.Int32)); err != nil {
+	if err := database.DelUserEntity(user.db, uint32(user.record.Id.Int32)); err != nil {
 		return err
 	}
-	ue.created = false
+	user.created = false
 	return nil
 }
 
-func (ue *UserEntity) Rename(title string) error {
-	if !ue.created {
-		return fmt.Errorf("user entity [%s:%d] was not created", ue.record.ParentDir, ue.record.Uid)
+func (user *UserSmartPath) Rename(title string) error {
+	if !user.created {
+		return fmt.Errorf("user entity [%s:%d] was not created", user.record.ParentDir, user.record.Uid)
 	}
 
-	old, _ := ue.Path()
+	old, _ := user.Path()
 	newPath := filepath.Join(filepath.Dir(old), title)
 
 	err := os.Rename(old, newPath)
@@ -102,76 +108,78 @@ func (ue *UserEntity) Rename(title string) error {
 		return err
 	}
 
-	ue.record.Name = title
-	return database.UpdateUserEntity(ue.db, ue.record)
+	user.record.Name = title
+	return database.UpdateUserEntity(user.db, user.record)
 }
 
-func (ue *UserEntity) Path() (string, error) {
-	return ue.record.Path(), nil
+func (user *UserSmartPath) Path() (string, error) {
+	return user.record.Path(), nil
 }
 
-func (ue *UserEntity) Name() string {
-	if ue.record.Name == "" {
-		panic(fmt.Errorf("the name of user entity [%s:%d] was unset", ue.record.ParentDir, ue.record.Uid))
+func (user *UserSmartPath) Name() string {
+	if user.record.Name == "" {
+		panic(fmt.Errorf("the name of user entity [%s:%d] was unset", user.record.ParentDir, user.record.Uid))
 	}
-	return ue.record.Name
+	return user.record.Name
 }
 
-func (ue *UserEntity) Id() int {
-	if !ue.created {
-		panic(fmt.Sprintf("user entity [%s:%d] was not created", ue.record.ParentDir, ue.record.Uid))
+func (user *UserSmartPath) Id() int {
+	if !user.created {
+		panic(fmt.Sprintf("user entity [%s:%d] was not created", user.record.ParentDir, user.record.Uid))
 	}
-	return int(ue.record.Id.Int32)
+	return int(user.record.Id.Int32)
 }
 
-func (ue *UserEntity) LatestReleaseTime() time.Time {
-	if !ue.created {
-		panic(fmt.Sprintf("user entity [%s:%d] was not created", ue.record.ParentDir, ue.record.Uid))
+func (user *UserSmartPath) LatestReleaseTime() time.Time {
+	if !user.created {
+		panic(fmt.Sprintf("user entity [%s:%d] was not created", user.record.ParentDir, user.record.Uid))
 	}
-	return ue.record.LatestReleaseTime.Time
+	return user.record.LatestReleaseTime.Time
 }
 
-func (ue *UserEntity) SetLatestReleaseTime(t time.Time) error {
-	if !ue.created {
-		return fmt.Errorf("user entity [%s:%d] was not created", ue.record.ParentDir, ue.record.Uid)
+func (user *UserSmartPath) SetLatestReleaseTime(t time.Time) error {
+	if !user.created {
+		return fmt.Errorf("user entity [%s:%d] was not created", user.record.ParentDir, user.record.Uid)
 	}
-	err := database.SetUserEntityLatestReleaseTime(ue.db, int(ue.record.Id.Int32), t)
+	err := database.SetUserEntityLatestReleaseTime(user.db, int(user.record.Id.Int32), t)
 	if err == nil {
-		ue.record.LatestReleaseTime.Scan(t)
+		user.record.LatestReleaseTime.Scan(t)
 	}
 	return err
 }
 
-func (ue *UserEntity) Uid() uint64 {
-	return ue.record.Uid
+func (user *UserSmartPath) Uid() uint64 {
+	return user.record.Uid
 }
 
-func (ue *UserEntity) Recorded() bool {
-	return ue.created
+func (user *UserSmartPath) Recorded() bool {
+	return user.created
 }
 
-type ListEntity struct {
-	record  *database.LstEntity
+////////////////////////////////////////////////////////////////////////////////
+
+type ListSmartPath struct {
+	record  *database.ListEntity
 	db      *sqlx.DB
 	created bool
 }
 
-func NewListEntity(db *sqlx.DB, lid int64, parentDir string) (*ListEntity, error) {
+func NewListSmartPath(db *sqlx.DB, lid int64, parentDir string) (*ListSmartPath, error) {
 	created := true
-	record, err := database.LocateLstEntity(db, lid, parentDir)
+	record, err := database.GetListEntity(db, lid, parentDir)
 	if err != nil {
 		return nil, err
 	}
 	if record == nil {
-		record = &database.LstEntity{}
+		record = &database.ListEntity{}
 		record.LstId = lid
 		record.ParentDir = parentDir
 		created = false
 	}
-	return &ListEntity{record: record, db: db, created: created}, nil
+	return &ListSmartPath{record: record, db: db, created: created}, nil
 }
 
-func (le *ListEntity) Create(name string) error {
+func (le *ListSmartPath) Create(name string) error {
 	le.record.Name = name
 	path, _ := le.Path()
 	if err := os.MkdirAll(path, 0755); err != nil {
@@ -185,7 +193,7 @@ func (le *ListEntity) Create(name string) error {
 	return nil
 }
 
-func (le *ListEntity) Remove() error {
+func (le *ListSmartPath) Remove() error {
 	if !le.created {
 		return fmt.Errorf("list entity [%s:%d] was not created", le.record.ParentDir, le.record.LstId)
 	}
@@ -201,7 +209,7 @@ func (le *ListEntity) Remove() error {
 	return nil
 }
 
-func (le *ListEntity) Rename(title string) error {
+func (le *ListSmartPath) Rename(title string) error {
 	if !le.created {
 		return fmt.Errorf("list entity [%s:%d] was not created", le.record.ParentDir, le.record.LstId)
 	}
@@ -220,11 +228,11 @@ func (le *ListEntity) Rename(title string) error {
 	return database.UpdateLstEntity(le.db, le.record)
 }
 
-func (le *ListEntity) Path() (string, error) {
+func (le *ListSmartPath) Path() (string, error) {
 	return le.record.Path(), nil
 }
 
-func (le ListEntity) Name() string {
+func (le ListSmartPath) Name() string {
 	if le.record.Name == "" {
 		panic(fmt.Sprintf("the name of list entity [%s:%d] was unset", le.record.ParentDir, le.record.LstId))
 	}
@@ -232,7 +240,7 @@ func (le ListEntity) Name() string {
 	return le.record.Name
 }
 
-func (le *ListEntity) Id() int {
+func (le *ListSmartPath) Id() int {
 	if !le.created {
 		panic(fmt.Sprintf("list entity [%s:%d] was not created", le.record.ParentDir, le.record.LstId))
 	}
@@ -240,9 +248,11 @@ func (le *ListEntity) Id() int {
 	return int(le.record.Id.Int32)
 }
 
-func (le *ListEntity) Recorded() bool {
+func (le *ListSmartPath) Recorded() bool {
 	return le.created
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 func updateUserLink(lnk *database.UserLink, db *sqlx.DB, path string) error {
 	name := filepath.Base(path)

@@ -89,14 +89,14 @@ func (td *TweetDumper) GetTotal(db *sqlx.DB) ([]*TweetInEntity, error) {
 	results := make([]*TweetInEntity, 0, td.count)
 
 	for k, v := range td.data {
-		e, err := database.GetUserEntity(db, k)
+		e, err := database.GetUserEntityById(db, k)
 		if err != nil {
 			return nil, err
 		}
 		if e == nil {
 			return nil, fmt.Errorf("entity %d is not exists", k)
 		}
-		ue := UserEntity{db: db, record: e, created: true}
+		ue := UserSmartPath{db: db, record: e, created: true}
 
 		for _, tw := range v {
 			results = append(results, &TweetInEntity{Tweet: tw, Entity: &ue})

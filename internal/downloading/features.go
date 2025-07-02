@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/WangWilly/xSync/internal/database"
+	"github.com/WangWilly/xSync/internal/tasks"
 	"github.com/WangWilly/xSync/internal/twitter"
 	"github.com/WangWilly/xSync/internal/utils"
 	"github.com/go-resty/resty/v2"
@@ -48,7 +49,7 @@ func (pt TweetInDir) GetPath() string {
 // TweetInEntity represents a tweet associated with a user entity
 type TweetInEntity struct {
 	Tweet  *twitter.Tweet
-	Entity *UserEntity
+	Entity *UserSmartPath
 }
 
 func (pt TweetInEntity) GetTweet() *twitter.Tweet {
@@ -63,8 +64,8 @@ func (pt TweetInEntity) GetPath() string {
 	return path
 }
 
-// userInLstEntity represents a user within a list entity context
-type userInLstEntity struct {
+// userWithinListEntity represents a user within a list entity context
+type userWithinListEntity struct {
 	user *twitter.User
 	leid *int
 }
@@ -81,10 +82,10 @@ const (
 
 // Global state variables
 var (
-	mutex              sync.Mutex
-	MaxDownloadRoutine int
-	syncedUsers        sync.Map // map[user_id]*UserEntity - tracks synced users for current run
-	syncedListUsers    sync.Map // leid -> uid -> struct{} - tracks synced list users
+	mutex                sync.Mutex
+	MaxDownloadRoutine   int
+	syncedUserSmartPaths sync.Map // map[user_id]*UserEntity - tracks synced users for current run
+	syncedListUsers      sync.Map // leid -> uid -> struct{} - tracks synced list users
 )
 
 // workerConfig holds configuration for download workers
@@ -107,7 +108,7 @@ func init() {
 // 任何一个 url 下载失败直接返回
 // TODO: 要么全做，要么不做
 func downloadTweetMedia(ctx context.Context, client *resty.Client, dir string, tweet *twitter.Tweet) error {
-	text := utils.WinFileName(tweet.Text)
+	text := utils.ToLegalWindowsFileName(tweet.Text)
 
 	for _, u := range tweet.Urls {
 		ext, err := utils.GetExtFromUrl(u)
@@ -252,57 +253,57 @@ func BatchDownloadTweet(ctx context.Context, client *resty.Client, pts ...Packge
 // User and Entity Synchronization
 ////////////////////////////////////////////////////////////////////////////////
 
-// syncUser updates the database record for a user
+// syncTwitterUserToDb updates the database record for a user
 // 更新数据库中对用户的记录
-func syncUser(db *sqlx.DB, user *twitter.User) error {
+func syncTwitterUserToDb(db *sqlx.DB, twitterUser *twitter.User) error {
 	renamed := false
 	isNew := false
-	usrdb, err := database.GetUserById(db, user.Id)
+	userRecord, err := database.GetUserById(db, twitterUser.TwitterId)
 	if err != nil {
 		return err
 	}
 
-	if usrdb == nil {
+	if userRecord == nil {
 		isNew = true
-		usrdb = &database.User{}
-		usrdb.Id = user.Id
+		userRecord = &database.User{}
+		userRecord.Id = twitterUser.TwitterId
 	} else {
-		renamed = usrdb.Name != user.Name || usrdb.ScreenName != user.ScreenName
+		renamed = userRecord.Name != twitterUser.Name || userRecord.ScreenName != twitterUser.ScreenName
 	}
 
-	usrdb.FriendsCount = user.FriendsCount
-	usrdb.IsProtected = user.IsProtected
-	usrdb.Name = user.Name
-	usrdb.ScreenName = user.ScreenName
+	userRecord.FriendsCount = twitterUser.FriendsCount
+	userRecord.IsProtected = twitterUser.IsProtected
+	userRecord.Name = twitterUser.Name
+	userRecord.ScreenName = twitterUser.ScreenName
 
 	if isNew {
-		err = database.CreateUser(db, usrdb)
+		err = database.CreateUser(db, userRecord)
 	} else {
-		err = database.UpdateUser(db, usrdb)
+		err = database.UpdateUser(db, userRecord)
 	}
 	if err != nil {
 		return err
 	}
 	if renamed || isNew {
-		err = database.RecordUserPreviousName(db, user.Id, user.Name, user.ScreenName)
+		err = database.RecordUserPreviousName(db, twitterUser.TwitterId, twitterUser.Name, twitterUser.ScreenName)
 	}
 	return err
 }
 
-func syncUserAndEntity(db *sqlx.DB, user *twitter.User, dir string) (*UserEntity, error) {
-	if err := syncUser(db, user); err != nil {
+func syncUserToDbAndGetSmartPath(db *sqlx.DB, user *twitter.User, dir string) (*UserSmartPath, error) {
+	if err := syncTwitterUserToDb(db, user); err != nil {
 		return nil, err
 	}
-	expectedTitle := utils.WinFileName(user.Title())
+	expectedFileName := utils.ToLegalWindowsFileName(user.Title())
 
-	entity, err := NewUserEntity(db, user.Id, dir)
+	userSmartPath, err := NewUserSmartPath(db, user.TwitterId, dir)
 	if err != nil {
 		return nil, err
 	}
-	if err = syncPath(entity, expectedTitle); err != nil {
+	if err = syncPath(userSmartPath, expectedFileName); err != nil {
 		return nil, err
 	}
-	return entity, nil
+	return userSmartPath, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -336,42 +337,22 @@ func shouldIngoreUser(user *twitter.User) bool {
 // Batch User Download Operations
 ////////////////////////////////////////////////////////////////////////////////
 
-func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, users []userInLstEntity, dir string, autoFollow bool, additional []*resty.Client) ([]*TweetInEntity, error) {
+func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, users []userWithinListEntity, dir string, autoFollow bool, additional []*resty.Client) ([]*TweetInEntity, error) {
 	if len(users) == 0 {
 		return nil, nil
 	}
 
 	uidToUser := make(map[uint64]*twitter.User)
 	for _, u := range users {
-		uidToUser[u.user.Id] = u.user
+		uidToUser[u.user.TwitterId] = u.user
 	}
 
-	// channels
-	tweetChan := make(chan PackgedTweet, MaxDownloadRoutine)
-	errChan := make(chan PackgedTweet)
-	// WG
-	prodwg := sync.WaitGroup{}
-	conswg := sync.WaitGroup{}
-	// ctx
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
-	// logger
-	updaterLogger := log.WithField("worker", "updating")
-	getterLogger := log.WithField("worker", "getting")
 
-	panicHandler := func() {
-		if r := recover(); r != nil {
-			cancel(fmt.Errorf("%v", r))
-			buf := make([]byte, 1<<16)
-			n := runtime.Stack(buf, false)
-			fmt.Printf("Recovered from panic: %v\n%s\n", r, buf[:n])
-		}
-	}
-
-	missingTweets := 0
-	depthByEntity := make(map[*UserEntity]int)
+	depthByEntity := make(map[*UserSmartPath]int)
 	// 大顶堆，以用户深度
-	userEntityHeap := utils.NewHeap(func(lhs, rhs *UserEntity) bool {
+	userEntityHeap := utils.NewHeap(func(lhs, rhs *UserSmartPath) bool {
 		luser, ruser := uidToUser[lhs.Uid()], uidToUser[rhs.Uid()]
 		lOnlyMater := luser.IsProtected && luser.Followstate == twitter.FS_FOLLOWING
 		rOnlyMaster := ruser.IsProtected && ruser.Followstate == twitter.FS_FOLLOWING
@@ -386,50 +367,51 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 	deepest := 0
 
 	// pre-process
-	func() {
-		defer panicHandler()
+	missingTweets := 0
+	updaterLogger := log.WithField("worker", "updating")
+	{
+		defer utils.PanicHandler(cancel)
 		log.Infoln("start pre processing users")
 
-		for _, userInLST := range users {
-			var pathEntity *UserEntity
-			var err error
-			user := userInLST.user
-			leid := userInLST.leid
+		for _, userWithinList := range users {
 
+			user := userWithinList.user
 			if shouldIngoreUser(user) {
 				continue
 			}
 
-			pe, loaded := syncedUsers.Load(user.Id)
+			var userSmartPath *UserSmartPath
+			maybeUserSmartPath, loaded := syncedUserSmartPaths.Load(user.TwitterId)
 			if !loaded {
-				pathEntity, err = syncUserAndEntity(db, user, dir)
+				var err error
+				userSmartPath, err = syncUserToDbAndGetSmartPath(db, user, dir)
 				if err != nil {
 					updaterLogger.WithField("user", user.Title()).Warnln("failed to update user or entity", err)
 					continue
 				}
-				syncedUsers.Store(user.Id, pathEntity)
+				syncedUserSmartPaths.Store(user.TwitterId, userSmartPath)
 
 				// 同步所有现存的指向此用户的符号链接
-				upath, _ := pathEntity.Path()
-				linkds, err := database.GetUserLinks(db, user.Id)
+				linkds, err := database.GetUserLinks(db, user.TwitterId)
 				if err != nil {
 					updaterLogger.WithField("user", user.Title()).Warnln("failed to get links to user:", err)
 				}
+				upath, _ := userSmartPath.Path()
 				for _, linkd := range linkds {
 					if err = updateUserLink(linkd, db, upath); err != nil {
 						updaterLogger.WithField("user", user.Title()).Warnln("failed to update link:", err)
 					}
 					sl, _ := syncedListUsers.LoadOrStore(int(linkd.ParentLstEntityId), &sync.Map{})
 					syncedList := sl.(*sync.Map)
-					syncedList.Store(user.Id, struct{}{})
+					syncedList.Store(user.TwitterId, struct{}{})
 				}
 
 				// 计算深度
 				if user.MediaCount != 0 && user.IsVisiable() {
-					missingTweets += max(0, user.MediaCount-int(pathEntity.record.MediaCount.Int32))
-					depthByEntity[pathEntity] = calcUserDepth(int(pathEntity.record.MediaCount.Int32), user.MediaCount)
-					userEntityHeap.Push(pathEntity)
-					deepest = max(deepest, depthByEntity[pathEntity])
+					missingTweets += max(0, user.MediaCount-int(userSmartPath.record.MediaCount.Int32))
+					depthByEntity[userSmartPath] = calcUserDepth(int(userSmartPath.record.MediaCount.Int32), user.MediaCount)
+					userEntityHeap.Push(userSmartPath)
+					deepest = max(deepest, depthByEntity[userSmartPath])
 				}
 
 				// 自动关注
@@ -441,30 +423,31 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 					}
 				}
 			} else {
-				pathEntity = pe.(*UserEntity)
+				userSmartPath = maybeUserSmartPath.(*UserSmartPath)
 			}
 
 			// 即便同步一个用户时也同步了所有指向此用户的链接，
 			// 但此用户仍可能会是一个新的 “列表-用户”，所以判断此用户链接是否同步过，
 			// 如果否，那么创建一个属于此列表的用户链接
+			leid := userWithinList.leid
 			if leid == nil {
 				continue
 			}
 			sl, _ := syncedListUsers.LoadOrStore(*leid, &sync.Map{})
 			syncedList := sl.(*sync.Map)
-			_, loaded = syncedList.LoadOrStore(user.Id, struct{}{})
+			_, loaded = syncedList.LoadOrStore(user.TwitterId, struct{}{})
 			if loaded {
 				continue
 			}
 
 			// 为当前列表的新用户创建符号链接
-			upath, _ := pathEntity.Path()
-			var linkname = pathEntity.Name()
+			upath, _ := userSmartPath.Path()
+			var linkname = userSmartPath.Name()
 
 			curlink := &database.UserLink{}
 			curlink.Name = linkname
 			curlink.ParentLstEntityId = int32(*leid)
-			curlink.Uid = user.Id
+			curlink.Uid = user.TwitterId
 
 			linkpath, err := curlink.Path(db)
 			if err == nil {
@@ -476,7 +459,7 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 				updaterLogger.WithField("user", user.Title()).Warnln("failed to create link for user:", err)
 			}
 		}
-	}()
+	}
 
 	if userEntityHeap.Empty() {
 		return nil, nil
@@ -490,9 +473,13 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 	clients = append(clients, client)
 	clients = append(clients, additional...)
 
-	producer := func(entity *UserEntity) {
+	getterLogger := log.WithField("worker", "getting")
+	prodwg := sync.WaitGroup{}
+	tweetChan := make(chan PackgedTweet, MaxDownloadRoutine)
+	errChan := make(chan PackgedTweet)
+	producer := func(entity *UserSmartPath) {
 		defer prodwg.Done()
-		defer panicHandler()
+		defer utils.PanicHandler(cancel)
 
 		user := uidToUser[entity.Uid()]
 		cli := twitter.SelectUserMediaClient(ctx, clients)
@@ -513,11 +500,12 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 		}
 		if v, ok := err.(*twitter.TwitterApiError); ok {
 			// 客户端不再可用
-			if v.Code == twitter.ErrExceedPostLimit {
+			switch v.Code {
+			case twitter.ErrExceedPostLimit:
 				twitter.SetClientError(cli, fmt.Errorf("reached the limit for seeing posts today"))
 				userEntityHeap.Push(entity)
 				return
-			} else if v.Code == twitter.ErrAccountLocked {
+			case twitter.ErrAccountLocked:
 				twitter.SetClientError(cli, fmt.Errorf("account is locked"))
 				userEntityHeap.Push(entity)
 				return
@@ -556,6 +544,7 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 	}
 
 	// launch worker
+	conswg := sync.WaitGroup{}
 	config := workerConfig{
 		ctx:    ctx,
 		wg:     &conswg,
@@ -636,12 +625,12 @@ func syncList(db *sqlx.DB, list *twitter.List) error {
 		return err
 	}
 	if listdb == nil {
-		return database.CreateLst(db, &database.Lst{Id: list.Id, Name: list.Name, OwnerId: list.Creator.Id})
+		return database.CreateLst(db, &database.Lst{Id: list.Id, Name: list.Name, OwnerId: list.Creator.TwitterId})
 	}
-	return database.UpdateLst(db, &database.Lst{Id: list.Id, Name: list.Name, OwnerId: list.Creator.Id})
+	return database.UpdateLst(db, &database.Lst{Id: list.Id, Name: list.Name, OwnerId: list.Creator.TwitterId})
 }
 
-func syncLstAndGetMembers(ctx context.Context, client *resty.Client, db *sqlx.DB, lst twitter.ListBase, dir string) ([]userInLstEntity, error) {
+func syncLstAndGetMembers(ctx context.Context, client *resty.Client, db *sqlx.DB, lst twitter.ListBase, dir string) ([]userWithinListEntity, error) {
 	if v, ok := lst.(*twitter.List); ok {
 		if err := syncList(db, v); err != nil {
 			return nil, err
@@ -649,8 +638,8 @@ func syncLstAndGetMembers(ctx context.Context, client *resty.Client, db *sqlx.DB
 	}
 
 	// update lst path and record
-	expectedTitle := utils.WinFileName(lst.Title())
-	entity, err := NewListEntity(db, lst.GetId(), dir)
+	expectedTitle := utils.ToLegalWindowsFileName(lst.Title())
+	entity, err := NewListSmartPath(db, lst.GetId(), dir)
 	if err != nil {
 		return nil, err
 	}
@@ -665,10 +654,10 @@ func syncLstAndGetMembers(ctx context.Context, client *resty.Client, db *sqlx.DB
 	}
 
 	// bind lst entity to users for creating symlink
-	packgedUsers := make([]userInLstEntity, 0, len(members))
+	packgedUsers := make([]userWithinListEntity, 0, len(members))
 	eid := entity.Id()
 	for _, user := range members {
-		packgedUsers = append(packgedUsers, userInLstEntity{user: user, leid: &eid})
+		packgedUsers = append(packgedUsers, userWithinListEntity{user: user, leid: &eid})
 	}
 	return packgedUsers, nil
 }
@@ -678,15 +667,26 @@ func syncLstAndGetMembers(ctx context.Context, client *resty.Client, db *sqlx.DB
 ////////////////////////////////////////////////////////////////////////////////
 
 // BatchDownloadAny orchestrates the complete download process for lists and users
-func BatchDownloadAny(ctx context.Context, client *resty.Client, db *sqlx.DB, lists []twitter.ListBase, users []*twitter.User, dir string, realDir string, autoFollow bool, additional []*resty.Client) ([]*TweetInEntity, error) {
+func BatchDownloadAny(
+	ctx context.Context,
+	client *resty.Client,
+	db *sqlx.DB,
+	task *tasks.Task,
+	dir string,
+	realDir string,
+	autoFollow bool,
+	additionalClients []*resty.Client,
+) ([]*TweetInEntity, error) {
 	log.Debugln("start collecting users")
-	packgedUsers := make([]userInLstEntity, 0)
-	wg := sync.WaitGroup{}
-	mtx := sync.Mutex{}
+
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
-	for _, lst := range lists {
+	packgedUsers := make([]userWithinListEntity, 0)
+
+	wg := sync.WaitGroup{}
+	mtx := sync.Mutex{}
+	for _, twitterPostList := range task.Lists {
 		wg.Add(1)
 		go func(lst twitter.ListBase) {
 			defer wg.Done()
@@ -698,17 +698,17 @@ func BatchDownloadAny(ctx context.Context, client *resty.Client, db *sqlx.DB, li
 			mtx.Lock()
 			defer mtx.Unlock()
 			packgedUsers = append(packgedUsers, res...)
-		}(lst)
+		}(twitterPostList)
 	}
 	wg.Wait()
 	if err := context.Cause(ctx); err != nil {
 		return nil, err
 	}
 
-	for _, usr := range users {
-		packgedUsers = append(packgedUsers, userInLstEntity{user: usr, leid: nil})
+	for _, interestedTwitterUser := range task.Users {
+		packgedUsers = append(packgedUsers, userWithinListEntity{user: interestedTwitterUser, leid: nil})
 	}
 
 	log.Debugln("collected users:", len(packgedUsers))
-	return BatchUserDownload(ctx, client, db, packgedUsers, realDir, autoFollow, additional)
+	return BatchUserDownload(ctx, client, db, packgedUsers, realDir, autoFollow, additionalClients)
 }

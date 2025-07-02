@@ -42,15 +42,15 @@ func PrintTask(task *Task) {
 // MakeTask creates a new task from CLI arguments
 func MakeTask(ctx context.Context, client *resty.Client, usrArgs cli.UserArgs, listArgs cli.ListArgs, follArgs cli.UserArgs) (*Task, error) {
 	task := Task{}
-	task.Users = make([]*twitter.User, 0)
-	task.Lists = make([]twitter.ListBase, 0)
 
+	task.Users = make([]*twitter.User, 0)
 	users, err := usrArgs.GetUser(ctx, client)
 	if err != nil {
 		return nil, err
 	}
 	task.Users = append(task.Users, users...)
 
+	task.Lists = make([]twitter.ListBase, 0)
 	lists, err := listArgs.GetList(ctx, client)
 	if err != nil {
 		return nil, err
@@ -67,5 +67,6 @@ func MakeTask(ctx context.Context, client *resty.Client, usrArgs cli.UserArgs, l
 	for _, user := range users {
 		task.Lists = append(task.Lists, user.Following())
 	}
+
 	return &task, nil
 }

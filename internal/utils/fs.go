@@ -17,28 +17,10 @@ var (
 	reWinNonSupport = regexp.MustCompile(`[/\\:*?"<>\|]`)
 )
 
-func PathExists(path string) (bool, error) {
-	_, err := os.Lstat(path)
-
-	if err == nil {
-
-		return true, nil
-
-	}
-
-	if os.IsNotExist(err) {
-
-		return false, nil
-
-	}
-	return false, err
-}
-
 // reserve 5 bytes for suffix
 const maxFileNameLen = 250
 
-// 将无后缀的文件名更新为有效的 Windows 文件名
-func WinFileName(name string) string {
+func ToLegalWindowsFileName(name string) string {
 	// 将字节切片转换为字符串
 	// 使用正则表达式进行替换
 	name = reUrl.ReplaceAllString(name, "")
@@ -69,6 +51,23 @@ func WinFileName(name string) string {
 	}
 
 	return buffer.String()
+}
+
+func PathExists(path string) (bool, error) {
+	_, err := os.Lstat(path)
+
+	if err == nil {
+
+		return true, nil
+
+	}
+
+	if os.IsNotExist(err) {
+
+		return false, nil
+
+	}
+	return false, err
 }
 
 func UniquePath(path string) (string, error) {

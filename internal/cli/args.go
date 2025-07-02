@@ -23,7 +23,7 @@ type UserArgs struct {
 func (u *UserArgs) GetUser(ctx context.Context, client *resty.Client) ([]*twitter.User, error) {
 	users := []*twitter.User{}
 	for _, id := range u.id {
-		usr, err := twitter.GetUserById(ctx, client, id)
+		usr, err := twitter.NewUserById(ctx, client, id)
 		if err != nil {
 			return nil, err
 		}
@@ -31,7 +31,7 @@ func (u *UserArgs) GetUser(ctx context.Context, client *resty.Client) ([]*twitte
 	}
 
 	for _, screenName := range u.screenName {
-		usr, err := twitter.GetUserByScreenName(ctx, client, screenName)
+		usr, err := twitter.NewUserByScreenName(ctx, client, screenName)
 		if err != nil {
 			return nil, err
 		}
@@ -103,7 +103,7 @@ type ListArgs struct {
 func (l ListArgs) GetList(ctx context.Context, client *resty.Client) ([]*twitter.List, error) {
 	lists := []*twitter.List{}
 	for _, id := range l.id {
-		list, err := twitter.GetLst(ctx, client, id)
+		list, err := twitter.NewList(ctx, client, id)
 		if err != nil {
 			return nil, err
 		}

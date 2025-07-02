@@ -41,7 +41,7 @@ func main() {
 	var listArgs cli.ListArgs
 	var follArgs cli.UserArgs
 	var confArg bool
-	var dbg bool
+	var isDebug bool
 	var autoFollow bool
 	var noRetry bool
 
@@ -49,12 +49,10 @@ func main() {
 	flag.Var(&usrArgs, "user", "download tweets from the user specified by user_id/screen_name since the last download")
 	flag.Var(&listArgs, "list", "batch download each member from list specified by list_id")
 	flag.Var(&follArgs, "foll", "batch download each member followed by the user specified by user_id/screen_name")
-	flag.BoolVar(&dbg, "dbg", false, "display debug message")
+	flag.BoolVar(&isDebug, "debug", false, "display debug message")
 	flag.BoolVar(&autoFollow, "auto-follow", false, "send follow request automatically to protected users")
 	flag.BoolVar(&noRetry, "no-retry", false, "quickly exit without retrying failed tweets")
 	flag.Parse()
-
-	var err error
 
 	// context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -74,7 +72,7 @@ func main() {
 	cliLogPath := filepath.Join(appRootPath, "client.log")
 	logPath := filepath.Join(appRootPath, "x_sync.log")
 	additionalCookiesPath := filepath.Join(appRootPath, "additional_cookies.yaml")
-	if err = os.MkdirAll(appRootPath, 0755); err != nil {
+	if err := os.MkdirAll(appRootPath, 0755); err != nil {
 		log.Fatalln("failed to make app dir", err)
 	}
 
@@ -86,11 +84,11 @@ func main() {
 		log.Fatalln("failed to create log file:", err)
 	}
 	defer logFile.Close()
-	logger.InitLogger(dbg, logFile)
+	logger.InitLogger(isDebug, logFile)
 
 	// report at exit
 	defer func() {
-		if dbg {
+		if isDebug {
 			twitter.ReportRequestCount()
 		}
 	}()
@@ -133,7 +131,7 @@ func main() {
 		log.Fatalln("failed to login:", err)
 	}
 	twitter.EnableRateLimit(client)
-	if dbg {
+	if isDebug {
 		twitter.EnableRequestCounting(client)
 	}
 	log.Infoln("signed in as:", color.FgLightBlue.Render(screenName))
@@ -146,25 +144,24 @@ func main() {
 		log.Warnln("failed to load additional cookies:", err)
 	}
 	log.Debugln("loaded additional cookies:", len(cookies))
-	addtional := batchLogin(ctx, dbg, cookies, screenName)
+	addtionalClients := batchLogin(ctx, isDebug, cookies, screenName)
 
 	// set clients logger
-	cliLogFile, err := os.OpenFile(cliLogPath, os.O_TRUNC|os.O_WRONLY|os.O_CREATE, 0644)
+	clientLogFile, err := os.OpenFile(cliLogPath, os.O_TRUNC|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		log.Fatalln("failed to create log file:", err)
 	}
-	defer cliLogFile.Close()
-	setClientLogger(client, cliLogFile)
-	for _, cli := range addtional {
-		setClientLogger(cli, cliLogFile)
+	defer clientLogFile.Close()
+	setClientLogger(client, clientLogFile)
+	for _, client := range addtionalClients {
+		setClientLogger(client, clientLogFile)
 	}
 
 	////////////////////////////////////////////////////////////////////////////////
 	// Previous Tweets Loading
 	////////////////////////////////////////////////////////////////////////////////
 	dumper := downloading.NewDumper()
-	err = dumper.Load(pathHelper.ErrorJ)
-	if err != nil {
+	if err := dumper.Load(pathHelper.ErrorJ); err != nil {
 		log.Fatalln("failed to load previous tweets", err)
 	}
 	log.Infoln("loaded previous failed tweets:", dumper.Count())
@@ -229,7 +226,7 @@ func main() {
 	log.Infoln("start working for...")
 	tasks.PrintTask(task)
 
-	todump, err = downloading.BatchDownloadAny(ctx, client, db, task.Lists, task.Users, pathHelper.Root, pathHelper.Users, autoFollow, addtional)
+	todump, err = downloading.BatchDownloadAny(ctx, client, db, task, pathHelper.Root, pathHelper.Users, autoFollow, addtionalClients)
 	if err != nil {
 		log.Errorln("failed to download:", err)
 	}

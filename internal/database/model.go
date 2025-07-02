@@ -38,14 +38,14 @@ type Lst struct {
 	OwnerId uint64 `db:"owner_uid"`
 }
 
-type LstEntity struct {
+type ListEntity struct {
 	Id        sql.NullInt32 `db:"id"`
 	LstId     int64         `db:"lst_id"`
 	Name      string        `db:"name"`
 	ParentDir string        `db:"parent_dir"`
 }
 
-func (le *LstEntity) Path() string {
+func (le *ListEntity) Path() string {
 	if le.ParentDir == "" || le.Name == "" {
 		panic("no enough info to get path")
 	}
@@ -60,7 +60,7 @@ func (ue *UserEntity) Path() string {
 }
 
 func (ul *UserLink) Path(db *sqlx.DB) (string, error) {
-	le, err := GetLstEntity(db, int(ul.ParentLstEntityId))
+	le, err := GetListEntityById(db, int(ul.ParentLstEntityId))
 	if err != nil {
 		return "", err
 	}

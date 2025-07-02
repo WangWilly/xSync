@@ -249,7 +249,7 @@ func TestUserEntity(t *testing.T) {
 		entity.MediaCount.Scan(25)
 
 		// locate
-		record, err := LocateUserEntity(db, entity.Uid, tempDir)
+		record, err := GetUserEntity(db, entity.Uid, tempDir)
 		if err != nil {
 			t.Error(err)
 			return
@@ -300,7 +300,7 @@ func generateUserEntity(uid uint64, pdir string) *UserEntity {
 }
 
 func hasSameUserEntityRecord(entity *UserEntity) (bool, error) {
-	record, err := GetUserEntity(db, int(entity.Id.Int32))
+	record, err := GetUserEntityById(db, int(entity.Id.Int32))
 	return record != nil && *record == *entity, err
 }
 
@@ -309,7 +309,7 @@ func TestLstEntity(t *testing.T) {
 	defer db.Close()
 	tempdir := os.TempDir()
 	n := 100
-	entities := make([]*LstEntity, n)
+	entities := make([]*ListEntity, n)
 	for i := 0; i < n; i++ {
 		entities[i] = generateLstEntity(int64(i), tempdir)
 	}
@@ -354,7 +354,7 @@ func TestLstEntity(t *testing.T) {
 		}
 
 		// locate
-		record, err := LocateLstEntity(db, entity.LstId, entity.ParentDir)
+		record, err := GetListEntity(db, entity.LstId, entity.ParentDir)
 		if err != nil {
 			t.Error(err)
 			return
@@ -381,20 +381,20 @@ func TestLstEntity(t *testing.T) {
 	}
 }
 
-func generateLstEntity(lid int64, pdir string) *LstEntity {
+func generateLstEntity(lid int64, pdir string) *ListEntity {
 	lst := generateList(int(lid))
 	if err := CreateLst(db, lst); err != nil {
 		panic(err)
 	}
-	entity := LstEntity{}
+	entity := ListEntity{}
 	entity.LstId = lid
 	entity.ParentDir = pdir
 	entity.Name = lst.Name
 	return &entity
 }
 
-func hasSameLstEntityRecord(entity *LstEntity) (bool, error) {
-	record, err := GetLstEntity(db, int(entity.Id.Int32))
+func hasSameLstEntityRecord(entity *ListEntity) (bool, error) {
+	record, err := GetListEntityById(db, int(entity.Id.Int32))
 	return record != nil && *record == *entity, err
 }
 
@@ -409,7 +409,7 @@ func TestLink(t *testing.T) {
 
 	for _, link := range links {
 		// path
-		le, err := GetLstEntity(db, int(link.ParentLstEntityId))
+		le, err := GetListEntityById(db, int(link.ParentLstEntityId))
 		if err != nil {
 			t.Error(err)
 			return

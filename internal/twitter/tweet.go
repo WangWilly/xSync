@@ -7,14 +7,24 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+////////////////////////////////////////////////////////////////////////////////
+// Tweet Structure and Types
+////////////////////////////////////////////////////////////////////////////////
+
+// Tweet represents a Twitter tweet with its metadata and content
 type Tweet struct {
-	Id        uint64
-	Text      string
-	CreatedAt time.Time
-	Creator   *User
-	Urls      []string
+	Id        uint64    // Unique identifier for the tweet
+	Text      string    // Tweet content text
+	CreatedAt time.Time // When the tweet was created
+	Creator   *User     // User who created the tweet
+	Urls      []string  // Media URLs associated with the tweet
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Tweet Parsing and Processing
+////////////////////////////////////////////////////////////////////////////////
+
+// parseTweetResults parses tweet data from Twitter API JSON response
 func parseTweetResults(tweet_results *gjson.Result) *Tweet {
 	var tweet Tweet
 	var err error = nil
@@ -35,7 +45,7 @@ func parseTweetResults(tweet_results *gjson.Result) *Tweet {
 
 	tweet.Id = result.Get("rest_id").Uint()
 	tweet.Text = legacy.Get("full_text").String()
-	tweet.Creator, _ = parseUserResults(&user_results)
+	tweet.Creator, _ = parseUserJson(&user_results)
 	tweet.CreatedAt, err = time.Parse(time.RubyDate, legacy.Get("created_at").String())
 	if err != nil {
 		panic(fmt.Errorf("invalid time format %v", err))
@@ -47,13 +57,15 @@ func parseTweetResults(tweet_results *gjson.Result) *Tweet {
 	return &tweet
 }
 
+// getUrlsFromMedia extracts media URLs from tweet media entities
 func getUrlsFromMedia(media *gjson.Result) []string {
 	results := []string{}
 	for _, m := range media.Array() {
 		typ := m.Get("type").String()
-		if typ == "video" || typ == "animated_gif" {
+		switch typ {
+		case "video", "animated_gif":
 			results = append(results, m.Get("video_info.variants.@reverse.0.url").String())
-		} else if typ == "photo" {
+		case "photo":
 			results = append(results, m.Get("media_url_https").String())
 		}
 	}

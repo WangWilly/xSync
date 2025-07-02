@@ -71,7 +71,7 @@ func TestUserEntity(t *testing.T) {
 		t.Errorf("latest release: %v, want %v", ue.LatestReleaseTime(), now)
 	}
 
-	record, err := database.GetUserEntity(db, ue.Id())
+	record, err := database.GetUserEntityById(db, ue.Id())
 	if err != nil {
 		t.Error(err)
 		return
@@ -96,7 +96,7 @@ func TestUserEntity(t *testing.T) {
 		t.Errorf("dir is exist after remove")
 	}
 
-	record, err = database.GetUserEntity(db, eid)
+	record, err = database.GetUserEntityById(db, eid)
 	if err != nil {
 		t.Error(err)
 		return
@@ -142,7 +142,7 @@ func TestListEntity(t *testing.T) {
 		t.Errorf("dir is exist after remove")
 	}
 
-	record, err := database.GetLstEntity(db, eid)
+	record, err := database.GetListEntityById(db, eid)
 	if err != nil {
 		t.Error(err)
 		return
@@ -171,9 +171,9 @@ func verifyDir(t *testing.T, entity SmartPath, wantPath string) {
 	}
 }
 
-func verifyUserRecord(t *testing.T, entity SmartPath, uid uint64, name string, parentDir string) *UserEntity {
+func verifyUserRecord(t *testing.T, entity SmartPath, uid uint64, name string, parentDir string) *UserSmartPath {
 	wantPath := filepath.Join(parentDir, name)
-	record, err := database.LocateUserEntity(db, uid, parentDir)
+	record, err := database.GetUserEntity(db, uid, parentDir)
 	if err != nil {
 		t.Error(err)
 		return nil
@@ -190,12 +190,12 @@ func verifyUserRecord(t *testing.T, entity SmartPath, uid uint64, name string, p
 	if record.Uid != uid {
 		t.Errorf("uid: %d, want %d", record.Uid, uid)
 	}
-	return entity.(*UserEntity)
+	return entity.(*UserSmartPath)
 }
 
 func verifyLstRecord(t *testing.T, entity SmartPath, lid int64, name string, parentDir string) {
 	wantPath := filepath.Join(parentDir, name)
-	record, err := database.LocateLstEntity(db, lid, parentDir)
+	record, err := database.GetListEntity(db, lid, parentDir)
 	if err != nil {
 		t.Error(err)
 		return
@@ -214,8 +214,8 @@ func verifyLstRecord(t *testing.T, entity SmartPath, lid int64, name string, par
 	}
 }
 
-func testSyncUser(t *testing.T, name string, uid int, parentdir string, exist bool) *UserEntity {
-	ue, err := NewUserEntity(db, uint64(uid), parentdir)
+func testSyncUser(t *testing.T, name string, uid int, parentdir string, exist bool) *UserSmartPath {
+	ue, err := NewUserSmartPath(db, uint64(uid), parentdir)
 	if err != nil {
 		t.Error(err)
 		return nil
@@ -246,8 +246,8 @@ func testSyncUser(t *testing.T, name string, uid int, parentdir string, exist bo
 	return ue
 }
 
-func testSyncList(t *testing.T, name string, lid int, parentDir string, exist bool) *ListEntity {
-	le, err := NewListEntity(db, int64(lid), parentDir)
+func testSyncList(t *testing.T, name string, lid int, parentDir string, exist bool) *ListSmartPath {
+	le, err := NewListSmartPath(db, int64(lid), parentDir)
 	if err != nil {
 		t.Error(err)
 		return nil

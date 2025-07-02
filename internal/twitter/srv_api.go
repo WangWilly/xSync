@@ -5,19 +5,34 @@ import (
 	"net/url"
 )
 
+////////////////////////////////////////////////////////////////////////////////
+// Constants and Global Configuration
+////////////////////////////////////////////////////////////////////////////////
+
 const HOST = "https://x.com"
 const AvgTweetsPerPage = 70
 
+////////////////////////////////////////////////////////////////////////////////
+// Core API Interfaces
+////////////////////////////////////////////////////////////////////////////////
+
+// api defines the basic interface for all Twitter API endpoints
 type api interface {
 	Path() string
 	QueryParam() url.Values
 }
 
+// timelineApi extends the basic api interface with cursor functionality for paginated endpoints
 type timelineApi interface {
 	SetCursor(cursor string)
 	api
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// URL Construction Utilities
+////////////////////////////////////////////////////////////////////////////////
+
+// makeUrl constructs a complete URL from an API endpoint
 func makeUrl(api api) string {
 	u, _ := url.Parse(HOST) // 这里绝对不会出错
 	u = u.JoinPath(api.Path())
@@ -25,6 +40,11 @@ func makeUrl(api api) string {
 	return u.String()
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// User API Structures
+////////////////////////////////////////////////////////////////////////////////
+
+// userByRestId represents the API endpoint for fetching user information by REST ID
 type userByRestId struct {
 	restId uint64
 }
@@ -42,6 +62,7 @@ func (a *userByRestId) QueryParam() url.Values {
 	return v
 }
 
+// userByScreenName represents the API endpoint for fetching user information by screen name
 type userByScreenName struct {
 	screenName string
 }
@@ -63,6 +84,7 @@ func (a *userByScreenName) QueryParam() url.Values {
 	return v
 }
 
+// userMedia represents the API endpoint for fetching user media
 type userMedia struct {
 	userId uint64
 	count  int
@@ -90,6 +112,11 @@ func (a *userMedia) SetCursor(cursor string) {
 	a.cursor = cursor
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// List API Structures
+////////////////////////////////////////////////////////////////////////////////
+
+// listByRestId represents the API endpoint for fetching list information by REST ID
 type listByRestId struct {
 	id uint64
 }
@@ -109,6 +136,7 @@ func (a *listByRestId) QueryParam() url.Values {
 	return v
 }
 
+// listMembers represents the API endpoint for fetching list members
 type listMembers struct {
 	id     uint64
 	count  int
@@ -133,6 +161,11 @@ func (a *listMembers) SetCursor(cursor string) {
 	a.cursor = cursor
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Following API Structures
+////////////////////////////////////////////////////////////////////////////////
+
+// following represents the API endpoint for fetching user's following list
 type following struct {
 	uid    uint64
 	count  int
@@ -157,6 +190,11 @@ func (a *following) SetCursor(cursor string) {
 	a.cursor = cursor
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Likes API Structures
+////////////////////////////////////////////////////////////////////////////////
+
+// likes represents the API endpoint for fetching user's liked tweets
 type likes struct {
 	userId uint64
 	count  int
