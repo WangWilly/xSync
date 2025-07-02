@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/WangWilly/xSync/internal/utils"
+	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/go-resty/resty/v2"
 )
 
@@ -54,17 +54,17 @@ func TestGetUser(t *testing.T) {
 		var u *User = nil
 		var err error
 		if test.id != 0 {
-			u, err = GetUserById(ctx, client, test.id)
+			u, err = NewUserById(ctx, client, test.id)
 		} else {
-			u, err = GetUserByScreenName(ctx, client, test.screenName)
+			u, err = NewUserByScreenName(ctx, client, test.screenName)
 		}
 		if err != nil {
 			t.Error("failed to get user:", err)
 			continue
 		}
 
-		if test.id != 0 && u.Id != test.id {
-			t.Errorf("user.id = %d, want %d", u.Id, test.id)
+		if test.id != 0 && u.TwitterId != test.id {
+			t.Errorf("user.id = %d, want %d", u.TwitterId, test.id)
 		} else if test.id == 0 && u.ScreenName != test.screenName {
 			t.Errorf("screen_name = %s, want %s", u.ScreenName, test.screenName)
 		}
@@ -106,7 +106,7 @@ func TestGetMedia(t *testing.T) {
 
 	routine := func(test string) {
 		defer wg.Done()
-		usr, err := GetUserByScreenName(ctx, client, test)
+		usr, err := NewUserByScreenName(ctx, client, test)
 		if err != nil {
 			t.Error(err)
 			return
@@ -166,7 +166,7 @@ func TestGetList(t *testing.T) {
 	ctx := context.Background()
 
 	for _, test := range someLists {
-		lst, err := GetLst(ctx, client, test)
+		lst, err := NewList(ctx, client, test)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -191,7 +191,7 @@ func TestGetMember(t *testing.T) {
 	routine := func(test uint64) {
 		defer wg.Done()
 
-		lst, err := GetLst(ctx, client, test)
+		lst, err := NewList(ctx, client, test)
 		if err != nil {
 			t.Error(err)
 			return
@@ -345,7 +345,7 @@ func TestApiError(t *testing.T) {
 }
 
 func TestFollowUser(t *testing.T) {
-	user, err := GetUserByScreenName(context.Background(), client, "su1__cos")
+	user, err := NewUserByScreenName(context.Background(), client, "su1__cos")
 	//user, err := GetUserByScreenName(context.Background(), client, "neco__nemu")
 	if err != nil {
 		t.Error(err)
@@ -355,7 +355,7 @@ func TestFollowUser(t *testing.T) {
 		t.Error(err)
 	}
 
-	user, err = GetUserByScreenName(context.Background(), client, "su1__cos")
+	user, err = NewUserByScreenName(context.Background(), client, "su1__cos")
 	if err != nil {
 		t.Error(err)
 		return

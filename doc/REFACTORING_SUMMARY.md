@@ -110,7 +110,7 @@ Imports are now clearly organized and only include necessary dependencies for ea
 
 - **Standard library imports** (context, fmt, os, etc.)
 - **Third-party library imports** (github.com/go-resty/resty/v2, etc.)
-- **Internal package imports** (github.com/WangWilly/xSync/internal/*)
+- **Internal package imports** (github.com/WangWilly/xSync/pkgs/*)
 
 ## Benefits of Refactoring
 

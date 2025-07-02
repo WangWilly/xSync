@@ -1,8 +1,8 @@
 package packedtweetdto
 
 import (
-	"github.com/WangWilly/xSync/internal/downloading/dtos/smartpathdto"
-	"github.com/WangWilly/xSync/internal/twitter"
+	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
+	"github.com/WangWilly/xSync/pkgs/twitter"
 )
 
 // InEntity represents a tweet associated with a user entity

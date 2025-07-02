@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/WangWilly/xSync/internal/utils"
+	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/go-resty/resty/v2"
 	"github.com/tidwall/gjson"
 )

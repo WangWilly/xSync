@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/WangWilly/xSync/internal/database"
+	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/jmoiron/sqlx"
 )
 

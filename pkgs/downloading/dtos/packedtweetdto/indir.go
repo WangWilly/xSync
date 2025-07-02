@@ -1,6 +1,6 @@
 package packedtweetdto
 
-import "github.com/WangWilly/xSync/internal/twitter"
+import "github.com/WangWilly/xSync/pkgs/twitter"
 
 // InDir represents a tweet with a specific directory path
 type InDir struct {

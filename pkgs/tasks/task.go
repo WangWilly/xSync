@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/WangWilly/xSync/internal/cli"
-	"github.com/WangWilly/xSync/internal/twitter"
+	"github.com/WangWilly/xSync/pkgs/cli"
+	"github.com/WangWilly/xSync/pkgs/twitter"
 	"github.com/go-resty/resty/v2"
 )
 

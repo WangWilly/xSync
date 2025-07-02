@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/WangWilly/xSync/internal/twitter"
+	"github.com/WangWilly/xSync/pkgs/twitter"
 	"github.com/go-resty/resty/v2"
 )
 

@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/WangWilly/xSync/internal/database"
-	"github.com/WangWilly/xSync/internal/downloading/dtos/smartpathdto"
-	"github.com/WangWilly/xSync/internal/twitter"
-	"github.com/WangWilly/xSync/internal/utils"
+	"github.com/WangWilly/xSync/pkgs/database"
+	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
+	"github.com/WangWilly/xSync/pkgs/twitter"
+	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/jmoiron/sqlx"
 )
 
