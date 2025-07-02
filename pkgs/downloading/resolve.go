@@ -12,8 +12,9 @@ import (
 	"time"
 
 	"github.com/WangWilly/xSync/pkgs/database"
-	"github.com/WangWilly/xSync/pkgs/downloading/dtos/packedtweetdto"
+	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
+	"github.com/WangWilly/xSync/pkgs/downloading/resolvehelper"
 	"github.com/WangWilly/xSync/pkgs/twitter"
 	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/go-resty/resty/v2"
@@ -53,32 +54,31 @@ func init() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, users []userWithinListEntity, dir string, autoFollow bool, additional []*resty.Client) ([]*packedtweetdto.InEntity, error) {
+func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, users []resolvehelper.UserWithinListEntity, dir string, autoFollow bool, additional []*resty.Client) ([]*dldto.InEntity, error) {
 	uidToUser := make(map[uint64]*twitter.User)
 	for _, u := range users {
-		uidToUser[u.user.TwitterId] = u.user
+		uidToUser[u.User.TwitterId] = u.User
 	}
 
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
-	depthByEntity := make(map[*smartpathdto.UserSmartPath]int)
+	userSmartPathToDepth := make(map[*smartpathdto.UserSmartPath]int)
 	// 大顶堆，以用户深度
-	userEntityHeap := utils.NewHeap(func(lhs, rhs *smartpathdto.UserSmartPath) bool {
+	userUserSmartPathHeap := utils.NewHeap(func(lhs, rhs *smartpathdto.UserSmartPath) bool {
 		luser, ruser := uidToUser[lhs.Uid()], uidToUser[rhs.Uid()]
 		lOnlyMater := luser.IsProtected && luser.Followstate == twitter.FS_FOLLOWING
 		rOnlyMaster := ruser.IsProtected && ruser.Followstate == twitter.FS_FOLLOWING
 
 		if lOnlyMater == rOnlyMaster {
-			return depthByEntity[lhs] > depthByEntity[rhs]
+			return userSmartPathToDepth[lhs] > userSmartPathToDepth[rhs]
 		}
 		return lOnlyMater // 优先让 master 获取只有他能看到的
 	})
 
+	// pre-process
 	start := time.Now()
 	deepest := 0
-
-	// pre-process
 	missingTweets := 0
 	updaterLogger := log.WithField("worker", "updating")
 	{
@@ -87,8 +87,8 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 
 		for _, userWithinList := range users {
 
-			user := userWithinList.user
-			if shouldIngoreUser(user) {
+			user := userWithinList.User
+			if resolvehelper.IsIngoreUser(user) {
 				continue
 			}
 
@@ -96,7 +96,7 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 			maybeUserSmartPath, loaded := syncedUserSmartPaths.Load(user.TwitterId)
 			if !loaded {
 				var err error
-				userSmartPath, err = syncUserToDbAndGetSmartPath(db, user, dir)
+				userSmartPath, err = resolvehelper.SyncUserToDbAndGetSmartPath(db, user, dir)
 				if err != nil {
 					updaterLogger.WithField("user", user.Title()).Warnln("failed to update user or entity", err)
 					continue
@@ -110,7 +110,7 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 				}
 				upath, _ := userSmartPath.Path()
 				for _, linkd := range linkds {
-					if err = updateUserLink(linkd, db, upath); err != nil {
+					if err = resolvehelper.UpdateUserLink(linkd, db, upath); err != nil {
 						updaterLogger.WithField("user", user.Title()).Warnln("failed to update link:", err)
 					}
 					sl, _ := syncedListUsers.LoadOrStore(int(linkd.ParentLstEntityId), &sync.Map{})
@@ -121,9 +121,9 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 				// 计算深度
 				if user.MediaCount != 0 && user.IsVisiable() {
 					missingTweets += max(0, user.MediaCount-int(userSmartPath.Record.MediaCount.Int32))
-					depthByEntity[userSmartPath] = calcUserDepth(int(userSmartPath.Record.MediaCount.Int32), user.MediaCount)
-					userEntityHeap.Push(userSmartPath)
-					deepest = max(deepest, depthByEntity[userSmartPath])
+					userSmartPathToDepth[userSmartPath] = resolvehelper.CalcUserDepth(int(userSmartPath.Record.MediaCount.Int32), user.MediaCount)
+					userUserSmartPathHeap.Push(userSmartPath)
+					deepest = max(deepest, userSmartPathToDepth[userSmartPath])
 				}
 
 				// 自动关注
@@ -141,7 +141,7 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 			// 即便同步一个用户时也同步了所有指向此用户的链接，
 			// 但此用户仍可能会是一个新的 “列表-用户”，所以判断此用户链接是否同步过，
 			// 如果否，那么创建一个属于此列表的用户链接
-			leid := userWithinList.leid
+			leid := userWithinList.Leid
 			if leid == nil {
 				continue
 			}
@@ -173,11 +173,11 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 		}
 	}
 
-	if userEntityHeap.Empty() {
+	if userUserSmartPathHeap.Empty() {
 		return nil, nil
 	}
 	log.Debugln("preprocessing finish, elapsed:", time.Since(start))
-	log.Debugln("real members:", userEntityHeap.Size())
+	log.Debugln("real members:", userUserSmartPathHeap.Size())
 	log.Debugln("missing tweets:", missingTweets)
 	log.Debugln("deepest:", deepest)
 
@@ -187,27 +187,27 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 
 	getterLogger := log.WithField("worker", "getting")
 	prodwg := sync.WaitGroup{}
-	tweetChan := make(chan packedtweetdto.PackedTweet, MaxDownloadRoutine)
-	errChan := make(chan packedtweetdto.PackedTweet)
+	tweetChan := make(chan dldto.TweetDlMeta, MaxDownloadRoutine)
+	errChan := make(chan dldto.TweetDlMeta)
 	producer := func(entity *smartpathdto.UserSmartPath) {
 		defer prodwg.Done()
 		defer utils.PanicHandler(cancel)
 
 		user := uidToUser[entity.Uid()]
-		cli := twitter.SelectUserMediaClient(ctx, clients)
+		cli := twitter.SelectClientForMediaRequest(ctx, clients)
 		if ctx.Err() != nil {
-			userEntityHeap.Push(entity)
+			userUserSmartPathHeap.Push(entity)
 			return
 		}
 		if cli == nil {
-			userEntityHeap.Push(entity)
+			userUserSmartPathHeap.Push(entity)
 			cancel(fmt.Errorf("no client available"))
 			return
 		}
 
 		tweets, err := user.GetMeidas(ctx, cli, &utils.TimeRange{Min: entity.LatestReleaseTime()})
 		if err == twitter.ErrWouldBlock {
-			userEntityHeap.Push(entity)
+			userUserSmartPathHeap.Push(entity)
 			return
 		}
 		if v, ok := err.(*twitter.TwitterApiError); ok {
@@ -215,16 +215,16 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 			switch v.Code {
 			case twitter.ErrExceedPostLimit:
 				twitter.SetClientError(cli, fmt.Errorf("reached the limit for seeing posts today"))
-				userEntityHeap.Push(entity)
+				userUserSmartPathHeap.Push(entity)
 				return
 			case twitter.ErrAccountLocked:
 				twitter.SetClientError(cli, fmt.Errorf("account is locked"))
-				userEntityHeap.Push(entity)
+				userUserSmartPathHeap.Push(entity)
 				return
 			}
 		}
 		if ctx.Err() != nil {
-			userEntityHeap.Push(entity)
+			userUserSmartPathHeap.Push(entity)
 			return
 		}
 		if err != nil {
@@ -241,7 +241,7 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 
 		// 确保该用户所有推文已推送并更新用户推文状态
 		for _, tw := range tweets {
-			pt := packedtweetdto.InEntity{Tweet: tw, Entity: entity}
+			pt := dldto.InEntity{Tweet: tw, Entity: entity}
 			select {
 			case tweetChan <- &pt:
 			case <-ctx.Done():
@@ -267,7 +267,7 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 		go tweetDownloader(client, &config, errChan, tweetChan)
 	}
 
-	producerPool, err := ants.NewPool(min(userTweetMaxConcurrent, userEntityHeap.Size()))
+	producerPool, err := ants.NewPool(min(userTweetMaxConcurrent, userUserSmartPathHeap.Size()))
 	if err != nil {
 		return nil, err
 	}
@@ -276,21 +276,21 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 	//closer
 	go func() {
 		// 按批次调用生产者
-		for !userEntityHeap.Empty() && ctx.Err() == nil {
+		for !userUserSmartPathHeap.Empty() && ctx.Err() == nil {
 			selected := []int{}
 			for count := 0; count < userTweetRateLimit && ctx.Err() == nil; {
-				if userEntityHeap.Empty() {
+				if userUserSmartPathHeap.Empty() {
 					break
 				}
 
-				entity := userEntityHeap.Peek()
-				depth := depthByEntity[entity]
+				entity := userUserSmartPathHeap.Peek()
+				depth := userSmartPathToDepth[entity]
 				if depth > userTweetRateLimit {
 					log.WithFields(log.Fields{
 						"user":  entity.Name(),
 						"depth": depth,
 					}).Warnln("user depth greater than the max limit of window")
-					userEntityHeap.Pop()
+					userUserSmartPathHeap.Pop()
 					continue
 				}
 
@@ -306,7 +306,7 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 
 				count += depth
 				//delete(depthByEntity, entity)
-				userEntityHeap.Pop()
+				userUserSmartPathHeap.Pop()
 			}
 			log.Debugln(selected)
 			prodwg.Wait()
@@ -318,11 +318,11 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 		close(errChan)
 	}()
 
-	fails := []*packedtweetdto.InEntity{}
+	fails := []*dldto.InEntity{}
 	for pt := range errChan {
-		fails = append(fails, pt.(*packedtweetdto.InEntity))
+		fails = append(fails, pt.(*dldto.InEntity))
 	}
-	log.Debugf("%d users unable to start", userEntityHeap.Size())
+	log.Debugf("%d users unable to start", userUserSmartPathHeap.Size())
 	return fails, context.Cause(ctx)
 }
 
@@ -330,19 +330,19 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 
 // BatchDownloadTweet downloads multiple tweets in parallel and returns failed downloads
 // 批量下载推文并返回下载失败的推文，可以保证推文被成功下载或被返回
-func BatchDownloadTweet(ctx context.Context, client *resty.Client, pts ...packedtweetdto.PackedTweet) []packedtweetdto.PackedTweet {
-	if len(pts) == 0 {
+func BatchDownloadTweet(ctx context.Context, client *resty.Client, tweetDlMetas ...dldto.TweetDlMeta) []dldto.TweetDlMeta {
+	if len(tweetDlMetas) == 0 {
 		return nil
 	}
 
 	ctx, cancel := context.WithCancelCause(ctx)
 
-	var errChan = make(chan packedtweetdto.PackedTweet)
-	var tweetChan = make(chan packedtweetdto.PackedTweet, len(pts))
+	var errChan = make(chan dldto.TweetDlMeta)
+	var tweetChan = make(chan dldto.TweetDlMeta, len(tweetDlMetas))
 	var wg sync.WaitGroup // number of working goroutines
-	var numRoutine = min(len(pts), MaxDownloadRoutine)
+	var numRoutine = min(len(tweetDlMetas), MaxDownloadRoutine)
 
-	for _, pt := range pts {
+	for _, pt := range tweetDlMetas {
 		tweetChan <- pt
 	}
 	close(tweetChan)
@@ -362,7 +362,7 @@ func BatchDownloadTweet(ctx context.Context, client *resty.Client, pts ...packed
 		close(errChan)
 	}()
 
-	errors := []packedtweetdto.PackedTweet{}
+	errors := []dldto.TweetDlMeta{}
 	for pt := range errChan {
 		errors = append(errors, pt)
 	}
@@ -375,8 +375,8 @@ func BatchDownloadTweet(ctx context.Context, client *resty.Client, pts ...packed
 
 // tweetDownloader handles downloading of tweets from a channel
 // 负责下载推文，保证 tweet chan 内的推文要么下载成功，要么推送至 error chan
-func tweetDownloader(client *resty.Client, config *workerConfig, errch chan<- packedtweetdto.PackedTweet, twech <-chan packedtweetdto.PackedTweet) {
-	var pt packedtweetdto.PackedTweet
+func tweetDownloader(client *resty.Client, config *workerConfig, errch chan<- dldto.TweetDlMeta, twech <-chan dldto.TweetDlMeta) {
+	var pt dldto.TweetDlMeta
 	var ok bool
 
 	defer config.wg.Done()

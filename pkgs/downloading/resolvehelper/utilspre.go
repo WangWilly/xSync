@@ -1,16 +1,15 @@
-package downloading
+package resolvehelper
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
 	"github.com/WangWilly/xSync/pkgs/twitter"
 	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/jmoiron/sqlx"
 )
-
-////////////////////////////////////////////////////////////////////////////////
-// User and Entity Synchronization
-////////////////////////////////////////////////////////////////////////////////
 
 // syncTwitterUserToDb updates the database record for a user
 // 更新数据库中对用户的记录
@@ -49,7 +48,7 @@ func syncTwitterUserToDb(db *sqlx.DB, twitterUser *twitter.User) error {
 	return err
 }
 
-func syncUserToDbAndGetSmartPath(db *sqlx.DB, user *twitter.User, dir string) (*smartpathdto.UserSmartPath, error) {
+func SyncUserToDbAndGetSmartPath(db *sqlx.DB, user *twitter.User, dir string) (*smartpathdto.UserSmartPath, error) {
 	if err := syncTwitterUserToDb(db, user); err != nil {
 		return nil, err
 	}
@@ -59,19 +58,56 @@ func syncUserToDbAndGetSmartPath(db *sqlx.DB, user *twitter.User, dir string) (*
 	if err != nil {
 		return nil, err
 	}
-	if err = syncPath(userSmartPath, expectedFileName); err != nil {
+	if err = SyncPath(userSmartPath, expectedFileName); err != nil {
 		return nil, err
 	}
 	return userSmartPath, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Utility Functions
-////////////////////////////////////////////////////////////////////////////////
+// TODO: make private
+
+func UpdateUserLink(lnk *database.UserLink, db *sqlx.DB, path string) error {
+	name := filepath.Base(path)
+
+	linkpath, err := lnk.Path(db)
+	if err != nil {
+		return err
+	}
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+
+	if lnk.Name == name {
+		// 用户未改名，但仍应确保链接存在
+		err = os.Symlink(path, linkpath)
+		if os.IsExist(err) {
+			err = nil
+		}
+		return err
+	}
+
+	newlinkpath := filepath.Join(filepath.Dir(linkpath), name)
+
+	if err = os.RemoveAll(linkpath); err != nil {
+		return err
+	}
+	if err = os.Symlink(path, newlinkpath); err != nil && !os.IsExist(err) {
+		return err
+	}
+
+	if err = database.UpdateUserLink(db, lnk.Id.Int32, name); err != nil {
+		return err
+	}
+
+	lnk.Name = name
+	return nil
+}
 
 // calcUserDepth calculates how many timeline requests are needed to get all user tweets
 // 需要请求多少次时间线才能获取完毕用户的推文？
-func calcUserDepth(exist int, total int) int {
+func CalcUserDepth(exist int, total int) int {
 	if exist >= total {
 		return 1
 	}
@@ -85,9 +121,4 @@ func calcUserDepth(exist int, total int) int {
 		depth++ //对于新用户，需要多获取一个空页
 	}
 	return depth
-}
-
-// shouldIngoreUser checks if a user should be ignored during processing
-func shouldIngoreUser(user *twitter.User) bool {
-	return user.Blocking || user.Muting
 }

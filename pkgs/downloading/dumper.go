@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/WangWilly/xSync/pkgs/database"
-	"github.com/WangWilly/xSync/pkgs/downloading/dtos/packedtweetdto"
+	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
 	"github.com/WangWilly/xSync/pkgs/twitter"
 	"github.com/jmoiron/sqlx"
@@ -87,8 +87,8 @@ func (td *TweetDumper) Clear() {
 	td.count = 0
 }
 
-func (td *TweetDumper) GetTotal(db *sqlx.DB) ([]*packedtweetdto.InEntity, error) {
-	results := make([]*packedtweetdto.InEntity, 0, td.count)
+func (td *TweetDumper) GetTotal(db *sqlx.DB) ([]*dldto.InEntity, error) {
+	results := make([]*dldto.InEntity, 0, td.count)
 
 	for k, v := range td.data {
 		e, err := database.GetUserEntityById(db, k)
@@ -105,7 +105,7 @@ func (td *TweetDumper) GetTotal(db *sqlx.DB) ([]*packedtweetdto.InEntity, error)
 		}
 
 		for _, tw := range v {
-			results = append(results, &packedtweetdto.InEntity{Tweet: tw, Entity: ue})
+			results = append(results, &dldto.InEntity{Tweet: tw, Entity: ue})
 		}
 	}
 	return results, nil

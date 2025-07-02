@@ -26,6 +26,15 @@ func NewHeap[T any](less func(T, T) bool) *Heap[T] {
 	return &Heap[T]{less: less, data: []T{}}
 }
 
+func NewByHeapify[T any](slice []T, less func(T, T) bool) *Heap[T] {
+	hp := &Heap[T]{less: less, data: slice}
+	n := len(slice)
+	for i := hp.parent(n - 1); i >= 0; i-- {
+		hp.siftDown(i)
+	}
+	return hp
+}
+
 func (hp *Heap[T]) Push(val T) {
 	hp.mtx.Lock()
 	defer hp.mtx.Unlock()

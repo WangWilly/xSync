@@ -1,4 +1,4 @@
-package downloading
+package resolvehelper
 
 import (
 	"context"
@@ -14,10 +14,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// userWithinListEntity represents a user within a list entity context
-type userWithinListEntity struct {
-	user *twitter.User
-	leid *int
+// UserWithinListEntity represents a user within a list entity context
+type UserWithinListEntity struct {
+	User *twitter.User
+	Leid *int
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -78,11 +78,11 @@ func WrapToUsersWithinListEntity(
 	db *sqlx.DB,
 	task *tasks.Task,
 	rootDir string,
-) ([]userWithinListEntity, error) {
+) ([]UserWithinListEntity, error) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
-	userList := make([]userWithinListEntity, 0)
+	userList := make([]UserWithinListEntity, 0)
 
 	wg := sync.WaitGroup{}
 	mtx := sync.Mutex{}
@@ -106,7 +106,7 @@ func WrapToUsersWithinListEntity(
 	}
 
 	for _, interestedTwitterUser := range task.Users {
-		userList = append(userList, userWithinListEntity{user: interestedTwitterUser, leid: nil})
+		userList = append(userList, UserWithinListEntity{User: interestedTwitterUser, Leid: nil})
 	}
 
 	return userList, nil
@@ -126,7 +126,7 @@ func syncList(db *sqlx.DB, list *twitter.List) error {
 	return database.UpdateLst(db, &database.Lst{Id: list.Id, Name: list.Name, OwnerId: list.Creator.TwitterId})
 }
 
-func syncLstAndGetMembers(ctx context.Context, client *resty.Client, db *sqlx.DB, lst twitter.ListBase, dir string) ([]userWithinListEntity, error) {
+func syncLstAndGetMembers(ctx context.Context, client *resty.Client, db *sqlx.DB, lst twitter.ListBase, dir string) ([]UserWithinListEntity, error) {
 	if v, ok := lst.(*twitter.List); ok {
 		if err := syncList(db, v); err != nil {
 			return nil, err
@@ -139,7 +139,7 @@ func syncLstAndGetMembers(ctx context.Context, client *resty.Client, db *sqlx.DB
 	if err != nil {
 		return nil, err
 	}
-	if err := syncPath(entity, expectedTitle); err != nil {
+	if err := SyncPath(entity, expectedTitle); err != nil {
 		return nil, err
 	}
 
@@ -150,10 +150,10 @@ func syncLstAndGetMembers(ctx context.Context, client *resty.Client, db *sqlx.DB
 	}
 
 	// bind lst entity to users for creating symlink
-	packgedUsers := make([]userWithinListEntity, 0, len(members))
+	packgedUsers := make([]UserWithinListEntity, 0, len(members))
 	eid := entity.Id()
 	for _, user := range members {
-		packgedUsers = append(packgedUsers, userWithinListEntity{user: user, leid: &eid})
+		packgedUsers = append(packgedUsers, UserWithinListEntity{User: user, Leid: &eid})
 	}
 	return packgedUsers, nil
 }

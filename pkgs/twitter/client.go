@@ -514,7 +514,7 @@ func SelectClient(ctx context.Context, clients []*resty.Client, path string) *re
 	return nil
 }
 
-// SelectUserMediaClient selects a client suitable for user media requests
-func SelectUserMediaClient(ctx context.Context, clients []*resty.Client) *resty.Client {
+// SelectClientForMediaRequest selects a client suitable for user media requests
+func SelectClientForMediaRequest(ctx context.Context, clients []*resty.Client) *resty.Client {
 	return SelectClient(ctx, clients, (&userMedia{}).Path())
 }

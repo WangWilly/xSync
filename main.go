@@ -16,7 +16,8 @@ import (
 	"github.com/WangWilly/xSync/pkgs/config"
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading"
-	"github.com/WangWilly/xSync/pkgs/downloading/dtos/packedtweetdto"
+	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
+	"github.com/WangWilly/xSync/pkgs/downloading/resolvehelper"
 	"github.com/WangWilly/xSync/pkgs/logger"
 	"github.com/WangWilly/xSync/pkgs/storage"
 	"github.com/WangWilly/xSync/pkgs/tasks"
@@ -201,7 +202,7 @@ func main() {
 	////////////////////////////////////////////////////////////////////////////
 	// Failed Tweets Dumping and Retry (Deferred)
 	////////////////////////////////////////////////////////////////////////////
-	var toDump = make([]*packedtweetdto.InEntity, 0)
+	var toDump = make([]*dldto.InEntity, 0)
 	defer func() {
 		dumper.Dump(pathHelper.ErrorJ)
 		log.Infof("%d tweets have been dumped and will be downloaded the next time the program runs", dumper.Count())
@@ -228,7 +229,7 @@ func main() {
 	tasks.PrintTask(task)
 
 	// todump, err = downloading.BatchDownloadAny(ctx, client, db, task, pathHelper.Root, pathHelper.Users, autoFollow, addtionalClients)
-	usersWithinListEntity, err := downloading.WrapToUsersWithinListEntity(ctx, client, db, task, pathHelper.Root)
+	usersWithinListEntity, err := resolvehelper.WrapToUsersWithinListEntity(ctx, client, db, task, pathHelper.Root)
 	if err != nil || len(usersWithinListEntity) == 0 {
 		log.Fatalln("failed to wrap users within list entity:", err)
 	}
@@ -287,7 +288,7 @@ func retryFailedTweets(ctx context.Context, dumper *downloading.TweetDumper, db 
 		return err
 	}
 
-	toretry := make([]packedtweetdto.PackedTweet, 0, len(legacy))
+	toretry := make([]dldto.TweetDlMeta, 0, len(legacy))
 	for _, leg := range legacy {
 		toretry = append(toretry, leg)
 	}
@@ -295,7 +296,7 @@ func retryFailedTweets(ctx context.Context, dumper *downloading.TweetDumper, db 
 	newFails := downloading.BatchDownloadTweet(ctx, client, toretry...)
 	dumper.Clear()
 	for _, pt := range newFails {
-		te := pt.(*packedtweetdto.InEntity)
+		te := pt.(*dldto.InEntity)
 		dumper.Push(te.Entity.Id(), te.Tweet)
 	}
 

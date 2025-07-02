@@ -1,4 +1,4 @@
-package packedtweetdto
+package dldto
 
 import (
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
