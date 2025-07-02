@@ -7,6 +7,8 @@ import (
 	"os"
 
 	"github.com/WangWilly/xSync/internal/database"
+	"github.com/WangWilly/xSync/internal/downloading/dtos/packedtweetdto"
+	"github.com/WangWilly/xSync/internal/downloading/dtos/smartpathdto"
 	"github.com/WangWilly/xSync/internal/twitter"
 	"github.com/jmoiron/sqlx"
 )
@@ -85,8 +87,8 @@ func (td *TweetDumper) Clear() {
 	td.count = 0
 }
 
-func (td *TweetDumper) GetTotal(db *sqlx.DB) ([]*TweetInEntity, error) {
-	results := make([]*TweetInEntity, 0, td.count)
+func (td *TweetDumper) GetTotal(db *sqlx.DB) ([]*packedtweetdto.InEntity, error) {
+	results := make([]*packedtweetdto.InEntity, 0, td.count)
 
 	for k, v := range td.data {
 		e, err := database.GetUserEntityById(db, k)
@@ -96,10 +98,14 @@ func (td *TweetDumper) GetTotal(db *sqlx.DB) ([]*TweetInEntity, error) {
 		if e == nil {
 			return nil, fmt.Errorf("entity %d is not exists", k)
 		}
-		ue := UserSmartPath{db: db, record: e, created: true}
+		// ue := smartpathdto.UserSmartPath{db: db, record: e, created: true}
+		ue, err := smartpathdto.RebuildUserSmartPath(db, e)
+		if err != nil {
+			return nil, err
+		}
 
 		for _, tw := range v {
-			results = append(results, &TweetInEntity{Tweet: tw, Entity: &ue})
+			results = append(results, &packedtweetdto.InEntity{Tweet: tw, Entity: ue})
 		}
 	}
 	return results, nil

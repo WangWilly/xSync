@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/WangWilly/xSync/internal/database"
+	"github.com/WangWilly/xSync/internal/downloading/dtos/smartpathdto"
 	"github.com/WangWilly/xSync/internal/twitter"
 	"github.com/WangWilly/xSync/internal/utils"
 	"github.com/jmoiron/sqlx"
@@ -152,7 +153,7 @@ func TestListEntity(t *testing.T) {
 	}
 }
 
-func verifyDir(t *testing.T, entity SmartPath, wantPath string) {
+func verifyDir(t *testing.T, entity smartpathdto.SmartPath, wantPath string) {
 	path, _ := entity.Path()
 	if wantPath != path {
 		t.Errorf("path: %s, want %s", path, wantPath)
@@ -171,7 +172,7 @@ func verifyDir(t *testing.T, entity SmartPath, wantPath string) {
 	}
 }
 
-func verifyUserRecord(t *testing.T, entity SmartPath, uid uint64, name string, parentDir string) *UserSmartPath {
+func verifyUserRecord(t *testing.T, entity smartpathdto.SmartPath, uid uint64, name string, parentDir string) *smartpathdto.UserSmartPath {
 	wantPath := filepath.Join(parentDir, name)
 	record, err := database.GetUserEntity(db, uid, parentDir)
 	if err != nil {
@@ -190,10 +191,10 @@ func verifyUserRecord(t *testing.T, entity SmartPath, uid uint64, name string, p
 	if record.Uid != uid {
 		t.Errorf("uid: %d, want %d", record.Uid, uid)
 	}
-	return entity.(*UserSmartPath)
+	return entity.(*smartpathdto.UserSmartPath)
 }
 
-func verifyLstRecord(t *testing.T, entity SmartPath, lid int64, name string, parentDir string) {
+func verifyLstRecord(t *testing.T, entity smartpathdto.SmartPath, lid int64, name string, parentDir string) {
 	wantPath := filepath.Join(parentDir, name)
 	record, err := database.GetListEntity(db, lid, parentDir)
 	if err != nil {
@@ -214,17 +215,17 @@ func verifyLstRecord(t *testing.T, entity SmartPath, lid int64, name string, par
 	}
 }
 
-func testSyncUser(t *testing.T, name string, uid int, parentdir string, exist bool) *UserSmartPath {
-	ue, err := NewUserSmartPath(db, uint64(uid), parentdir)
+func testSyncUser(t *testing.T, name string, uid int, parentdir string, exist bool) *smartpathdto.UserSmartPath {
+	ue, err := smartpathdto.NewUserSmartPath(db, uint64(uid), parentdir)
 	if err != nil {
 		t.Error(err)
 		return nil
 	}
 
 	// 创建状态正确
-	if ue.created && !exist {
-		t.Errorf("ue.created = true, want false")
-	} else if !ue.created && exist {
+	if ue.Created && !exist {
+		t.Errorf("ue.Created = true, want false")
+	} else if !ue.Created && exist {
 		t.Errorf("ue.created = false, want true")
 	}
 
@@ -246,17 +247,17 @@ func testSyncUser(t *testing.T, name string, uid int, parentdir string, exist bo
 	return ue
 }
 
-func testSyncList(t *testing.T, name string, lid int, parentDir string, exist bool) *ListSmartPath {
-	le, err := NewListSmartPath(db, int64(lid), parentDir)
+func testSyncList(t *testing.T, name string, lid int, parentDir string, exist bool) *smartpathdto.ListSmartPath {
+	le, err := smartpathdto.NewListSmartPath(db, int64(lid), parentDir)
 	if err != nil {
 		t.Error(err)
 		return nil
 	}
 
 	// 创建状态正确
-	if le.created && !exist {
-		t.Errorf("ue.created = true, want false")
-	} else if !le.created && exist {
+	if le.Created && !exist {
+		t.Errorf("ue.Created = true, want false")
+	} else if !le.Created && exist {
 		t.Errorf("ue.created = false, want true")
 	}
 
