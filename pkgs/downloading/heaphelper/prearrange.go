@@ -1,7 +1,8 @@
-package resolvehelper
+package heaphelper
 
 import (
 	"context"
+	"os"
 	"sync"
 
 	"github.com/WangWilly/xSync/pkgs/database"
@@ -156,4 +157,21 @@ func syncLstAndGetMembers(ctx context.Context, client *resty.Client, db *sqlx.DB
 		packgedUsers = append(packgedUsers, UserWithinListEntity{User: user, Leid: &eid})
 	}
 	return packgedUsers, nil
+}
+
+func SyncPath(path smartpathdto.SmartPath, expectedName string) error {
+	if !path.Recorded() {
+		return path.Create(expectedName)
+	}
+
+	if path.Name() != expectedName {
+		return path.Rename(expectedName)
+	}
+
+	p, err := path.Path()
+	if err != nil {
+		return err
+	}
+
+	return os.MkdirAll(p, 0755)
 }

@@ -1,7 +1,8 @@
-package resolvehelper
+package heaphelper
 
 import (
 	"context"
+	"errors"
 	"os"
 	"sync"
 	"time"
@@ -12,16 +13,18 @@ import (
 	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/go-resty/resty/v2"
 	"github.com/jmoiron/sqlx"
+
 	log "github.com/sirupsen/logrus"
 )
 
 type helper struct {
-	users                []UserWithinListEntity
 	uidToUserMap         map[uint64]*twitter.User
 	userSmartPathToDepth map[*smartpathdto.UserSmartPath]int
 
 	syncedUserSmartPaths sync.Map // map[uint64]*smartpathdto.UserSmartPath
 	syncedListUsers      sync.Map // map[int]*sync.Map, where int is ListEntityId, and *sync.Map is map[uint64]struct{}
+
+	heap *utils.Heap[*smartpathdto.UserSmartPath]
 }
 
 func NewHelper(users []UserWithinListEntity) *helper {
@@ -31,15 +34,45 @@ func NewHelper(users []UserWithinListEntity) *helper {
 	}
 
 	return &helper{
-		users:                users,
 		uidToUserMap:         uidToUserMap,
 		userSmartPathToDepth: make(map[*smartpathdto.UserSmartPath]int),
 
 		syncedUserSmartPaths: sync.Map{},
+		syncedListUsers:      sync.Map{},
+
+		heap: nil,
 	}
 }
 
-func (h *helper) MakeHeap(ctx context.Context, db *sqlx.DB, client *resty.Client, dir string, autoFollow bool) *utils.Heap[*smartpathdto.UserSmartPath] {
+// Deprecated: Use NewHelper instead.
+func NewHelperDirect(
+	uidToUserMap map[uint64]*twitter.User,
+	userSmartPathToDepth map[*smartpathdto.UserSmartPath]int,
+	heap *utils.Heap[*smartpathdto.UserSmartPath],
+) *helper {
+	return &helper{
+		uidToUserMap:         uidToUserMap,
+		userSmartPathToDepth: userSmartPathToDepth,
+		syncedUserSmartPaths: sync.Map{},
+		syncedListUsers:      sync.Map{},
+		heap:                 heap,
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+func (h *helper) MakeHeap(
+	ctx context.Context,
+	db *sqlx.DB,
+	client *resty.Client,
+	users []UserWithinListEntity,
+	dir string,
+	autoFollow bool,
+) error {
+	if h.heap != nil {
+		return errors.New("heap is already initialized, call MakeHeap only once")
+	}
+
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	defer utils.PanicHandler(cancel)
@@ -51,7 +84,7 @@ func (h *helper) MakeHeap(ctx context.Context, db *sqlx.DB, client *resty.Client
 	debugDeepest := 0
 	debugMissingTweets := 0
 	userUserSmartPathRaw := make([]*smartpathdto.UserSmartPath, 0)
-	for _, userWithinList := range h.users {
+	for _, userWithinList := range users {
 		user := userWithinList.User
 		if IsIngoreUser(user) {
 			continue
@@ -151,12 +184,35 @@ func (h *helper) MakeHeap(ctx context.Context, db *sqlx.DB, client *resty.Client
 	userUserSmartPathHeap := utils.NewByHeapify(userUserSmartPathRaw, lessFunc)
 	if userUserSmartPathHeap.Empty() {
 		logger.Infoln("no user to process")
-		return nil
+		return errors.New("no user to process")
 	}
 
 	logger.Debugln("preprocessing finish, elapsed:", time.Since(tic))
 	logger.Debugln("real members:", userUserSmartPathHeap.Size())
 	logger.Debugln("missing tweets:", debugMissingTweets)
 	logger.Debugln("deepest:", debugDeepest)
-	return userUserSmartPathHeap
+
+	h.heap = userUserSmartPathHeap
+	return nil
+}
+
+func (h *helper) GetHeap() *utils.Heap[*smartpathdto.UserSmartPath] {
+	if h.heap == nil {
+		panic("heap is not initialized, call MakeHeap first")
+	}
+	return h.heap
+}
+
+func (h *helper) GetDepth(userSmartPath *smartpathdto.UserSmartPath) int {
+	if depth, ok := h.userSmartPathToDepth[userSmartPath]; ok {
+		return depth
+	}
+	return 0
+}
+
+func (h *helper) GetUserByTwitterId(twitterId uint64) *twitter.User {
+	if user, ok := h.uidToUserMap[twitterId]; ok {
+		return user
+	}
+	return nil
 }

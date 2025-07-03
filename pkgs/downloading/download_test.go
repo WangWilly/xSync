@@ -9,7 +9,7 @@ import (
 
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
-	"github.com/WangWilly/xSync/pkgs/downloading/resolvehelper"
+	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
 	"github.com/WangWilly/xSync/pkgs/twitter"
 	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/jmoiron/sqlx"
@@ -230,7 +230,7 @@ func testSyncUser(t *testing.T, name string, uid int, parentdir string, exist bo
 		t.Errorf("ue.created = false, want true")
 	}
 
-	if err := resolvehelper.SyncPath(ue, name); err != nil {
+	if err := heaphelper.SyncPath(ue, name); err != nil {
 		t.Error(err)
 		return nil
 	}
@@ -262,7 +262,7 @@ func testSyncList(t *testing.T, name string, lid int, parentDir string, exist bo
 		t.Errorf("ue.created = false, want true")
 	}
 
-	if err := resolvehelper.SyncPath(le, name); err != nil {
+	if err := heaphelper.SyncPath(le, name); err != nil {
 		t.Error(err)
 		return nil
 	}

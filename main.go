@@ -17,7 +17,7 @@ import (
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
-	"github.com/WangWilly/xSync/pkgs/downloading/resolvehelper"
+	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
 	"github.com/WangWilly/xSync/pkgs/logger"
 	"github.com/WangWilly/xSync/pkgs/storage"
 	"github.com/WangWilly/xSync/pkgs/tasks"
@@ -229,7 +229,7 @@ func main() {
 	tasks.PrintTask(task)
 
 	// todump, err = downloading.BatchDownloadAny(ctx, client, db, task, pathHelper.Root, pathHelper.Users, autoFollow, addtionalClients)
-	usersWithinListEntity, err := resolvehelper.WrapToUsersWithinListEntity(ctx, client, db, task, pathHelper.Root)
+	usersWithinListEntity, err := heaphelper.WrapToUsersWithinListEntity(ctx, client, db, task, pathHelper.Root)
 	if err != nil || len(usersWithinListEntity) == 0 {
 		log.Fatalln("failed to wrap users within list entity:", err)
 	}

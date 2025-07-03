@@ -1,4 +1,4 @@
-package resolvehelper
+package heaphelper
 
 import (
 	"os"
@@ -10,6 +10,28 @@ import (
 	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/jmoiron/sqlx"
 )
+
+// TODO: make private
+// IsIngoreUser checks if a user should be ignored during processing
+func IsIngoreUser(user *twitter.User) bool {
+	return user.Blocking || user.Muting
+}
+
+func SyncUserToDbAndGetSmartPath(db *sqlx.DB, user *twitter.User, dir string) (*smartpathdto.UserSmartPath, error) {
+	if err := syncTwitterUserToDb(db, user); err != nil {
+		return nil, err
+	}
+	expectedFileName := utils.ToLegalWindowsFileName(user.Title())
+
+	userSmartPath, err := smartpathdto.NewUserSmartPath(db, user.TwitterId, dir)
+	if err != nil {
+		return nil, err
+	}
+	if err = SyncPath(userSmartPath, expectedFileName); err != nil {
+		return nil, err
+	}
+	return userSmartPath, nil
+}
 
 // syncTwitterUserToDb updates the database record for a user
 // 更新数据库中对用户的记录
@@ -46,22 +68,6 @@ func syncTwitterUserToDb(db *sqlx.DB, twitterUser *twitter.User) error {
 		err = database.RecordUserPreviousName(db, twitterUser.TwitterId, twitterUser.Name, twitterUser.ScreenName)
 	}
 	return err
-}
-
-func SyncUserToDbAndGetSmartPath(db *sqlx.DB, user *twitter.User, dir string) (*smartpathdto.UserSmartPath, error) {
-	if err := syncTwitterUserToDb(db, user); err != nil {
-		return nil, err
-	}
-	expectedFileName := utils.ToLegalWindowsFileName(user.Title())
-
-	userSmartPath, err := smartpathdto.NewUserSmartPath(db, user.TwitterId, dir)
-	if err != nil {
-		return nil, err
-	}
-	if err = SyncPath(userSmartPath, expectedFileName); err != nil {
-		return nil, err
-	}
-	return userSmartPath, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////

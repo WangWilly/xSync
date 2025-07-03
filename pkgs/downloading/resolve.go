@@ -2,50 +2,32 @@ package downloading
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
-	"github.com/WangWilly/xSync/pkgs/downloading/resolvehelper"
+	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
+	"github.com/WangWilly/xSync/pkgs/downloading/mediadownloadhelper"
+	"github.com/WangWilly/xSync/pkgs/downloading/resolveworker"
 	"github.com/WangWilly/xSync/pkgs/twitter"
 	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/go-resty/resty/v2"
-	"github.com/gookit/color"
 	"github.com/jmoiron/sqlx"
-	"github.com/panjf2000/ants/v2"
 	log "github.com/sirupsen/logrus"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Download configuration constants
-const (
-	userTweetRateLimit     = 500
-	userTweetMaxConcurrent = 100 // avoid DownstreamOverCapacityError
-)
-
 // Global state variables
 var (
-	mutex                sync.Mutex
 	MaxDownloadRoutine   int
 	syncedUserSmartPaths sync.Map // map[user_id]*UserEntity - tracks synced users for current run
 	syncedListUsers      sync.Map // leid -> uid -> struct{} - tracks synced list users
 )
-
-// workerConfig holds configuration for download workers
-type workerConfig struct {
-	ctx    context.Context
-	wg     *sync.WaitGroup
-	cancel context.CancelCauseFunc
-}
 
 // init initializes default configuration values
 func init() {
@@ -54,7 +36,7 @@ func init() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, users []resolvehelper.UserWithinListEntity, dir string, autoFollow bool, additional []*resty.Client) ([]*dldto.InEntity, error) {
+func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, users []heaphelper.UserWithinListEntity, dir string, autoFollow bool, additional []*resty.Client) ([]*dldto.InEntity, error) {
 	uidToUser := make(map[uint64]*twitter.User)
 	for _, u := range users {
 		uidToUser[u.User.TwitterId] = u.User
@@ -88,7 +70,7 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 		for _, userWithinList := range users {
 
 			user := userWithinList.User
-			if resolvehelper.IsIngoreUser(user) {
+			if heaphelper.IsIngoreUser(user) {
 				continue
 			}
 
@@ -96,7 +78,7 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 			maybeUserSmartPath, loaded := syncedUserSmartPaths.Load(user.TwitterId)
 			if !loaded {
 				var err error
-				userSmartPath, err = resolvehelper.SyncUserToDbAndGetSmartPath(db, user, dir)
+				userSmartPath, err = heaphelper.SyncUserToDbAndGetSmartPath(db, user, dir)
 				if err != nil {
 					updaterLogger.WithField("user", user.Title()).Warnln("failed to update user or entity", err)
 					continue
@@ -110,7 +92,7 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 				}
 				upath, _ := userSmartPath.Path()
 				for _, linkd := range linkds {
-					if err = resolvehelper.UpdateUserLink(linkd, db, upath); err != nil {
+					if err = heaphelper.UpdateUserLink(linkd, db, upath); err != nil {
 						updaterLogger.WithField("user", user.Title()).Warnln("failed to update link:", err)
 					}
 					sl, _ := syncedListUsers.LoadOrStore(int(linkd.ParentLstEntityId), &sync.Map{})
@@ -121,7 +103,7 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 				// 计算深度
 				if user.MediaCount != 0 && user.IsVisiable() {
 					missingTweets += max(0, user.MediaCount-int(userSmartPath.Record.MediaCount.Int32))
-					userSmartPathToDepth[userSmartPath] = resolvehelper.CalcUserDepth(int(userSmartPath.Record.MediaCount.Int32), user.MediaCount)
+					userSmartPathToDepth[userSmartPath] = heaphelper.CalcUserDepth(int(userSmartPath.Record.MediaCount.Int32), user.MediaCount)
 					userUserSmartPathHeap.Push(userSmartPath)
 					deepest = max(deepest, userSmartPathToDepth[userSmartPath])
 				}
@@ -181,142 +163,25 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 	log.Debugln("missing tweets:", missingTweets)
 	log.Debugln("deepest:", deepest)
 
-	clients := make([]*resty.Client, 0)
-	clients = append(clients, client)
-	clients = append(clients, additional...)
+	heapHelper := heaphelper.NewHelperDirect(
+		uidToUser,
+		userSmartPathToDepth,
+		userUserSmartPathHeap,
+	)
 
-	getterLogger := log.WithField("worker", "getting")
-	prodwg := sync.WaitGroup{}
+	mediaDownloadHelper := mediadownloadhelper.NewHelper()
+	worker := resolveworker.NewWorker(ctx, cancel, mediaDownloadHelper)
+
 	tweetChan := make(chan dldto.TweetDlMeta, MaxDownloadRoutine)
 	errChan := make(chan dldto.TweetDlMeta)
-	producer := func(entity *smartpathdto.UserSmartPath) {
-		defer prodwg.Done()
-		defer utils.PanicHandler(cancel)
-
-		user := uidToUser[entity.Uid()]
-		cli := twitter.SelectClientForMediaRequest(ctx, clients)
-		if ctx.Err() != nil {
-			userUserSmartPathHeap.Push(entity)
-			return
-		}
-		if cli == nil {
-			userUserSmartPathHeap.Push(entity)
-			cancel(fmt.Errorf("no client available"))
-			return
-		}
-
-		tweets, err := user.GetMeidas(ctx, cli, &utils.TimeRange{Min: entity.LatestReleaseTime()})
-		if err == twitter.ErrWouldBlock {
-			userUserSmartPathHeap.Push(entity)
-			return
-		}
-		if v, ok := err.(*twitter.TwitterApiError); ok {
-			// 客户端不再可用
-			switch v.Code {
-			case twitter.ErrExceedPostLimit:
-				twitter.SetClientError(cli, fmt.Errorf("reached the limit for seeing posts today"))
-				userUserSmartPathHeap.Push(entity)
-				return
-			case twitter.ErrAccountLocked:
-				twitter.SetClientError(cli, fmt.Errorf("account is locked"))
-				userUserSmartPathHeap.Push(entity)
-				return
-			}
-		}
-		if ctx.Err() != nil {
-			userUserSmartPathHeap.Push(entity)
-			return
-		}
-		if err != nil {
-			getterLogger.WithField("user", entity.Name()).Warnln("failed to get user medias:", err)
-			return
-		}
-
-		if len(tweets) == 0 {
-			if err := database.UpdateUserEntityMediCount(db, entity.Id(), user.MediaCount); err != nil {
-				getterLogger.WithField("user", entity.Name()).Panicln("failed to update user medias count:", err)
-			}
-			return
-		}
-
-		// 确保该用户所有推文已推送并更新用户推文状态
-		for _, tw := range tweets {
-			pt := dldto.InEntity{Tweet: tw, Entity: entity}
-			select {
-			case tweetChan <- &pt:
-			case <-ctx.Done():
-				return // 防止无消费者导致死锁
-			}
-		}
-
-		if err := database.UpdateUserEntityTweetStat(db, entity.Id(), tweets[0].CreatedAt, user.MediaCount); err != nil {
-			// 影响程序的正确性，必须 Panic
-			getterLogger.WithField("user", entity.Name()).Panicln("failed to update user tweets stat:", err)
-		}
-	}
-
-	// launch worker
-	conswg := sync.WaitGroup{}
-	config := workerConfig{
-		ctx:    ctx,
-		wg:     &conswg,
-		cancel: cancel,
-	}
-	for i := 0; i < MaxDownloadRoutine; i++ {
-		conswg.Add(1)
-		go tweetDownloader(client, &config, errChan, tweetChan)
-	}
-
-	producerPool, err := ants.NewPool(min(userTweetMaxConcurrent, userUserSmartPathHeap.Size()))
-	if err != nil {
-		return nil, err
-	}
-	defer ants.Release()
-
-	//closer
-	go func() {
-		// 按批次调用生产者
-		for !userUserSmartPathHeap.Empty() && ctx.Err() == nil {
-			selected := []int{}
-			for count := 0; count < userTweetRateLimit && ctx.Err() == nil; {
-				if userUserSmartPathHeap.Empty() {
-					break
-				}
-
-				entity := userUserSmartPathHeap.Peek()
-				depth := userSmartPathToDepth[entity]
-				if depth > userTweetRateLimit {
-					log.WithFields(log.Fields{
-						"user":  entity.Name(),
-						"depth": depth,
-					}).Warnln("user depth greater than the max limit of window")
-					userUserSmartPathHeap.Pop()
-					continue
-				}
-
-				if depth+count > userTweetRateLimit {
-					break
-				}
-
-				prodwg.Add(1)
-				producerPool.Submit(func() {
-					producer(entity)
-				})
-				selected = append(selected, depth)
-
-				count += depth
-				//delete(depthByEntity, entity)
-				userUserSmartPathHeap.Pop()
-			}
-			log.Debugln(selected)
-			prodwg.Wait()
-		}
-		close(tweetChan)
-		log.Debugf("getting tweets completed, elapsed time: %v", time.Since(start))
-
-		conswg.Wait()
-		close(errChan)
-	}()
+	worker.DownloadTweetMediaFromHeapWithChan(
+		heapHelper,
+		db,
+		client,
+		additional,
+		MaxDownloadRoutine,
+		tweetChan,
+		errChan)
 
 	fails := []*dldto.InEntity{}
 	for pt := range errChan {
@@ -334,7 +199,9 @@ func BatchDownloadTweet(ctx context.Context, client *resty.Client, tweetDlMetas 
 	if len(tweetDlMetas) == 0 {
 		return nil
 	}
+	return nil
 
+	/** TODO:
 	ctx, cancel := context.WithCancelCause(ctx)
 
 	var errChan = make(chan dldto.TweetDlMeta)
@@ -345,13 +212,7 @@ func BatchDownloadTweet(ctx context.Context, client *resty.Client, tweetDlMetas 
 	for _, pt := range tweetDlMetas {
 		tweetChan <- pt
 	}
-	close(tweetChan)
 
-	config := workerConfig{
-		ctx:    ctx,
-		cancel: cancel,
-		wg:     &wg,
-	}
 	for range numRoutine {
 		wg.Add(1)
 		go tweetDownloader(client, &config, errChan, tweetChan)
@@ -367,108 +228,5 @@ func BatchDownloadTweet(ctx context.Context, client *resty.Client, tweetDlMetas 
 		errors = append(errors, pt)
 	}
 	return errors
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Download Worker Operations
-////////////////////////////////////////////////////////////////////////////////
-
-// tweetDownloader handles downloading of tweets from a channel
-// 负责下载推文，保证 tweet chan 内的推文要么下载成功，要么推送至 error chan
-func tweetDownloader(client *resty.Client, config *workerConfig, errch chan<- dldto.TweetDlMeta, twech <-chan dldto.TweetDlMeta) {
-	var pt dldto.TweetDlMeta
-	var ok bool
-
-	defer config.wg.Done()
-	defer func() {
-		if p := recover(); p != nil {
-			config.cancel(fmt.Errorf("%v", p)) // panic 取消上下文，防止生产者死锁
-			log.WithField("worker", "downloading").Errorln("panic:", p)
-
-			if pt != nil {
-				errch <- pt // push 正下载的推文
-			}
-			// 确保只有1个协程的情况下，未能下载完毕的推文仍然会全部推送到 errch
-			for pt := range twech {
-				errch <- pt
-			}
-		}
-	}()
-
-	for {
-		select {
-		case pt, ok = <-twech:
-			if !ok {
-				return
-			}
-		case <-config.ctx.Done():
-			for pt := range twech {
-				errch <- pt
-			}
-			return
-		}
-
-		path := pt.GetPath()
-		if path == "" {
-			errch <- pt
-			continue
-		}
-		err := downloadTweetMedia(config.ctx, client, path, pt.GetTweet())
-		// 403: Dmcaed
-		if err != nil && !utils.IsStatusCode(err, 404) && !utils.IsStatusCode(err, 403) {
-			errch <- pt
-		}
-
-		// cancel context and exit if no disk space
-		if errors.Is(err, syscall.ENOSPC) {
-			config.cancel(err)
-		}
-	}
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Tweet Media Download Operations
-////////////////////////////////////////////////////////////////////////////////
-
-// downloadTweetMedia downloads all media files for a given tweet
-// 任何一个 url 下载失败直接返回
-// TODO: 要么全做，要么不做
-func downloadTweetMedia(ctx context.Context, client *resty.Client, dir string, tweet *twitter.Tweet) error {
-	text := utils.ToLegalWindowsFileName(tweet.Text)
-
-	for _, u := range tweet.Urls {
-		ext, err := utils.GetExtFromUrl(u)
-		if err != nil {
-			return err
-		}
-
-		// 请求
-		resp, err := client.R().SetContext(ctx).SetQueryParam("name", "4096x4096").Get(u)
-		if err != nil {
-			return err
-		}
-
-		mutex.Lock()
-		path, err := utils.UniquePath(filepath.Join(dir, text+ext))
-		if err != nil {
-			mutex.Unlock()
-			return err
-		}
-		file, err := os.Create(path)
-		mutex.Unlock()
-		if err != nil {
-			return err
-		}
-
-		defer os.Chtimes(path, time.Time{}, tweet.CreatedAt)
-		defer file.Close()
-
-		_, err = file.Write(resp.Body())
-		if err != nil {
-			return err
-		}
-	}
-
-	fmt.Printf("%s %s\n", color.FgLightMagenta.Render("["+tweet.Creator.Title()+"]"), text)
-	return nil
+	*/
 }
