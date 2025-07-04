@@ -146,8 +146,6 @@ func (w *worker) DownloadTweetMediaFromList(
 			w.DownloadTweetMediaFromTweetChan(client, errChan, tweetChan)
 		}()
 	}
-	consumerWg.Wait()
-
 	notYetDownloaded := make([]dldto.TweetDlMeta, 0)
 	for pt := range errChan {
 		if pt == nil {
@@ -155,6 +153,8 @@ func (w *worker) DownloadTweetMediaFromList(
 		}
 		notYetDownloaded = append(notYetDownloaded, pt)
 	}
+
+	consumerWg.Wait()
 
 	if len(notYetDownloaded) > 0 {
 		log.WithField("worker", "downloading").Warnf("failed to download %d tweets", len(notYetDownloaded))
