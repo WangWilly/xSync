@@ -199,34 +199,24 @@ func BatchDownloadTweet(ctx context.Context, client *resty.Client, tweetDlMetas 
 	if len(tweetDlMetas) == 0 {
 		return nil
 	}
-	return nil
 
-	/** TODO:
 	ctx, cancel := context.WithCancelCause(ctx)
 
-	var errChan = make(chan dldto.TweetDlMeta)
-	var tweetChan = make(chan dldto.TweetDlMeta, len(tweetDlMetas))
-	var wg sync.WaitGroup // number of working goroutines
-	var numRoutine = min(len(tweetDlMetas), MaxDownloadRoutine)
+	mediaDownloadHelper := mediadownloadhelper.NewHelper()
+	worker := resolveworker.NewWorker(ctx, cancel, mediaDownloadHelper)
 
-	for _, pt := range tweetDlMetas {
-		tweetChan <- pt
+	notYetDownloaded, err := worker.DownloadTweetMediaFromList(
+		tweetDlMetas,
+		client,
+		min(len(tweetDlMetas), MaxDownloadRoutine),
+	)
+	if err != nil {
+		log.WithError(err).Errorln("failed to download tweets")
 	}
 
-	for range numRoutine {
-		wg.Add(1)
-		go tweetDownloader(client, &config, errChan, tweetChan)
+	if len(notYetDownloaded) > 0 {
+		log.WithField("worker", "downloading").Warnf("failed to download %d tweets", len(notYetDownloaded))
+		return notYetDownloaded
 	}
-
-	go func() {
-		wg.Wait()
-		close(errChan)
-	}()
-
-	errors := []dldto.TweetDlMeta{}
-	for pt := range errChan {
-		errors = append(errors, pt)
-	}
-	return errors
-	*/
+	return nil
 }

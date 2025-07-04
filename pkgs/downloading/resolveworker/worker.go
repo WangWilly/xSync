@@ -104,11 +104,64 @@ func (w *worker) DownloadTweetMediaFromHeapWithChan(
 	consumerWg := sync.WaitGroup{}
 	for range maxDownloadRoutine {
 		consumerWg.Add(1)
-		go w.DownloadTweetMediaFromTweetChan(client, errChan, tweetChan)
+		go func() {
+			defer consumerWg.Done()
+			w.DownloadTweetMediaFromTweetChan(client, errChan, tweetChan)
+		}()
 	}
 	consumerWg.Wait()
 
 	return nil
+}
+
+func (w *worker) DownloadTweetMediaFromList(
+	tweetDlMetas []dldto.TweetDlMeta,
+	client *resty.Client,
+	maxDownloadRoutine int,
+) ([]dldto.TweetDlMeta, error) {
+	tweetChan := make(chan dldto.TweetDlMeta, maxDownloadRoutine)
+	errChan := make(chan dldto.TweetDlMeta)
+
+	for _, pt := range tweetDlMetas {
+		w.genCount++
+		tweetChan <- pt
+	}
+	go func() {
+		defer close(tweetChan)
+		for {
+			w.checkCond.L.Lock()
+			defer w.checkCond.L.Unlock()
+
+			if w.genCount == w.dlCount {
+				return
+			}
+		}
+	}()
+
+	consumerWg := sync.WaitGroup{}
+	for range maxDownloadRoutine {
+		consumerWg.Add(1)
+		go func() {
+			defer consumerWg.Done()
+			w.DownloadTweetMediaFromTweetChan(client, errChan, tweetChan)
+		}()
+	}
+	consumerWg.Wait()
+
+	notYetDownloaded := make([]dldto.TweetDlMeta, 0)
+	for pt := range errChan {
+		if pt == nil {
+			continue
+		}
+		notYetDownloaded = append(notYetDownloaded, pt)
+	}
+
+	if len(notYetDownloaded) > 0 {
+		log.WithField("worker", "downloading").Warnf("failed to download %d tweets", len(notYetDownloaded))
+		return notYetDownloaded, fmt.Errorf("failed to download %d tweets", len(notYetDownloaded))
+	}
+
+	return nil, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -154,7 +207,7 @@ func (w *worker) pooledSourceFromHeap(
 			prodWg.Add(1)
 			producerPool.Submit(func() {
 				defer prodWg.Done()
-				w.fetchTweet(entity, heapHelper, db, clients, tweetChan)
+				w.fetchTweetOrFailbackToHeap(entity, heapHelper, db, clients, tweetChan)
 			})
 			selected = append(selected, depth)
 
@@ -166,7 +219,7 @@ func (w *worker) pooledSourceFromHeap(
 	}
 }
 
-func (w *worker) fetchTweet(
+func (w *worker) fetchTweetOrFailbackToHeap(
 	entity *smartpathdto.UserSmartPath,
 	heapHelper HeapHelper,
 	db *sqlx.DB,
@@ -267,6 +320,7 @@ func (w *worker) DownloadTweetMediaFromTweetChan(client *resty.Client, errChan c
 
 			atomic.AddInt32(&w.dlCount, int32(dlCount))
 		}
+		close(errChan)
 	}()
 
 	for {
