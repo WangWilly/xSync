@@ -1,11 +1,11 @@
-# Twitter Media Downloader
+# xSync - Twitter Media Downloader
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/WangWilly/xSync.svg)](https://pkg.go.dev/github.com/WangWilly/xSync)
 [![Go Report Card](https://goreportcard.com/badge/github.com/WangWilly/xSync)](https://goreportcard.com/report/github.com/WangWilly/xSync)
-[![Coverage Status](https://coveralls.io/repos/github/unkmonster/tmd/badge.svg?branch=master)](https://coveralls.io/github/unkmonster/tmd?branch=master)
-[![Go](https://github.com/WangWilly/xSync/actions/workflows/go.yml/badge.svg)](https://github.com/WangWilly/xSync/actions/workflows/go.yml)
-![GitHub Release](https://img.shields.io/github/v/release/unkmonster/tmd) 
-![GitHub License](https://img.shields.io/github/license/unkmonster/tmd?logo=github)
+[![Coverage Status](https://coveralls.io/repos/github/WangWilly/xSync/badge.svg?branch=master)](https://coveralls.io/github/WangWilly/xSync?branch=master)
+<!-- [![Go](https://github.com/WangWilly/xSync/actions/workflows/go.yml/badge.svg)](https://github.com/WangWilly/xSync/actions/workflows/go.yml) -->
+<!-- ![GitHub Release](https://img.shields.io/github/v/release/unkmonster/tmd)  -->
+![GitHub License](https://img.shields.io/github/license/WangWilly/xSync?logo=github)
 
 跨平台的推特媒体下载器。用于轻松，快速，安全，整洁，批量的下载推特上用户的推文。支持手动指定用户或通过列表、用户关注批量下载。开箱即用！
 
