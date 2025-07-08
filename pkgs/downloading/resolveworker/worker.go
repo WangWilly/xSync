@@ -98,15 +98,22 @@ func (w *worker) DownloadTweetMediaFromHeapWithChan(
 		defer close(tweetChan)
 		for {
 			w.checkCond.L.Lock()
-			defer w.checkCond.L.Unlock()
+			genCount := atomic.LoadInt32(&w.genCount)
+			dlCount := atomic.LoadInt32(&w.dlCount)
 
 			log.WithFields(log.Fields{
-				"genCount": w.genCount,
-				"dlCount":  w.dlCount,
+				"genCount": genCount,
+				"dlCount":  dlCount,
 			}).Info("checking if all tweets are downloaded")
-			if w.genCount == w.dlCount {
+
+			if genCount == dlCount && genCount > 0 {
+				w.checkCond.L.Unlock()
 				return
 			}
+
+			// Wait for signal from download completion or timeout
+			w.checkCond.Wait()
+			w.checkCond.L.Unlock()
 		}
 	}()
 
@@ -132,18 +139,24 @@ func (w *worker) DownloadTweetMediaFromList(
 	errChan := make(chan dldto.TweetDlMeta)
 
 	for _, pt := range tweetDlMetas {
-		w.genCount++
+		atomic.AddInt32(&w.genCount, 1)
 		tweetChan <- pt
 	}
 	go func() {
 		defer close(tweetChan)
 		for {
 			w.checkCond.L.Lock()
-			defer w.checkCond.L.Unlock()
+			genCount := atomic.LoadInt32(&w.genCount)
+			dlCount := atomic.LoadInt32(&w.dlCount)
 
-			if w.genCount == w.dlCount {
+			if genCount == dlCount && genCount > 0 {
+				w.checkCond.L.Unlock()
 				return
 			}
+
+			// Wait for signal from download completion
+			w.checkCond.Wait()
+			w.checkCond.L.Unlock()
 		}
 	}()
 
@@ -251,16 +264,30 @@ func (w *worker) fetchTweetOrFailbackToHeap(
 	logger.WithField("user", entity.Name()).Infoln("fetching user tweets")
 	user := heapHelper.GetUserByTwitterId(entity.Uid())
 	heap := heapHelper.GetHeap()
+
+	// Helper function to safely push back to heap
+	safePushToHeap := func(reason string) {
+		logger.WithField("user", entity.Name()).Warnf("%s, pushing back to heap", reason)
+		// Use a goroutine to avoid blocking on heap operations
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.WithField("user", entity.Name()).Errorf("panic while pushing to heap: %v", r)
+				}
+			}()
+			heap.Push(entity)
+		}()
+	}
+
 	if w.ctx.Err() != nil {
-		logger.WithField("user", entity.Name()).Warnln("context cancelled, pushing back to heap")
-		heap.Push(entity)
+		safePushToHeap("context cancelled")
 		return
 	}
+
 	logger.WithField("user", entity.Name()).Infof("latest release time: %s", entity.LatestReleaseTime())
 	cli := twitter.SelectClientForMediaRequest(w.ctx, clients)
 	if cli == nil {
-		logger.WithField("user", entity.Name()).Warnln("no client available, pushing back to heap")
-		heap.Push(entity)
+		safePushToHeap("no client available")
 		w.cancel(fmt.Errorf("no client available"))
 		return
 	}
@@ -268,10 +295,10 @@ func (w *worker) fetchTweetOrFailbackToHeap(
 	logger.WithField("user", entity.Name()).Infoln("getting user medias")
 	tweets, err := user.GetMeidas(w.ctx, cli, &utils.TimeRange{Min: entity.LatestReleaseTime()})
 	if err == twitter.ErrWouldBlock {
-		logger.WithField("user", entity.Name()).Warnln("client would block, pushing back to heap")
-		heap.Push(entity)
+		safePushToHeap("client would block")
 		return
 	}
+
 	logger.WithField("user", entity.Name()).Infoln("got user medias")
 	if v, ok := err.(*twitter.TwitterApiError); ok {
 		logger.WithField("user", entity.Name()).Warnf("twitter api error: %s", v.Error())
@@ -279,19 +306,20 @@ func (w *worker) fetchTweetOrFailbackToHeap(
 		switch v.Code {
 		case twitter.ErrExceedPostLimit:
 			twitter.SetClientError(cli, fmt.Errorf("reached the limit for seeing posts today"))
-			heap.Push(entity)
+			safePushToHeap("exceed post limit")
 			return
 		case twitter.ErrAccountLocked:
 			twitter.SetClientError(cli, fmt.Errorf("account is locked"))
-			heap.Push(entity)
+			safePushToHeap("account locked")
 			return
 		}
 	}
+
 	if w.ctx.Err() != nil {
-		logger.WithField("user", entity.Name()).Warnln("context cancelled while getting user medias, pushing back to heap")
-		heap.Push(entity)
+		safePushToHeap("context cancelled while getting user medias")
 		return
 	}
+
 	if err != nil {
 		logger.WithField("user", entity.Name()).Warnln("failed to get user medias:", err)
 		return
@@ -309,16 +337,29 @@ func (w *worker) fetchTweetOrFailbackToHeap(
 		"user":     entity.Name(),
 		"tweetNum": len(tweets),
 	}).Infoln("found tweets, preparing to push to tweet channel")
+
 	// 确保该用户所有推文已推送并更新用户推文状态
+	// Use a timeout to prevent indefinite blocking
+	pushTimeout := 120 * time.Second
 	for _, tw := range tweets {
 		pt := dldto.InEntity{Tweet: tw, Entity: entity}
+
+		// Create a fresh timeout for each tweet push
+		timeoutTimer := time.NewTimer(pushTimeout)
+
 		select {
 		case tweetChan <- &pt:
+			timeoutTimer.Stop() // Stop the timer to prevent resource leak
 			logger.WithField("user", entity.Name()).Infof("pushed tweet %d to tweet channel", tw.Id)
 			atomic.AddInt32(&w.genCount, 1)
-			logger.WithField("user", entity.Name()).Infof("genCount: %d", w.genCount)
+			logger.WithField("user", entity.Name()).Infof("genCount: %d", atomic.LoadInt32(&w.genCount))
 		case <-w.ctx.Done():
+			timeoutTimer.Stop() // Stop the timer to prevent resource leak
+			logger.WithField("user", entity.Name()).Warnln("context cancelled while pushing tweets")
 			return // 防止无消费者导致死锁
+		case <-timeoutTimer.C:
+			logger.WithField("user", entity.Name()).Warnln("timeout while pushing tweet to channel")
+			return
 		}
 	}
 
@@ -338,7 +379,13 @@ func (w *worker) DownloadTweetMediaFromTweetChan(client *resty.Client, errChan c
 	var ok bool
 	logger := log.WithField("function", "DownloadTweetMediaFromTweetChan")
 
-	defer w.checkCond.Signal()
+	defer func() {
+		// Signal the condition variable to wake up the checker
+		w.checkCond.L.Lock()
+		w.checkCond.Signal()
+		w.checkCond.L.Unlock()
+	}()
+
 	defer func() {
 		if p := recover(); p != nil {
 			w.cancel(fmt.Errorf("%v", p)) // panic 取消上下文，防止生产者死锁
@@ -353,11 +400,10 @@ func (w *worker) DownloadTweetMediaFromTweetChan(client *resty.Client, errChan c
 				errChan <- pt
 				atomic.AddInt32(&w.dlCount, 1)
 			}
-
 		}
 		logger.WithFields(log.Fields{
-			"genCount": w.genCount,
-			"dlCount":  w.dlCount,
+			"genCount": atomic.LoadInt32(&w.genCount),
+			"dlCount":  atomic.LoadInt32(&w.dlCount),
 		}).Infoln("finished downloading tweets from tweet channel")
 		close(errChan)
 	}()
@@ -375,7 +421,6 @@ func (w *worker) DownloadTweetMediaFromTweetChan(client *resty.Client, errChan c
 				errChan <- pt
 				atomic.AddInt32(&w.dlCount, 1)
 			}
-
 			return
 		}
 
@@ -383,7 +428,13 @@ func (w *worker) DownloadTweetMediaFromTweetChan(client *resty.Client, errChan c
 		err := w.mediaDownloadHelper.SafeDownload(w.ctx, client, pt)
 		logger.WithField("tweet", pt.GetTweet().Id).Infoln("finished downloading tweet media")
 		atomic.AddInt32(&w.dlCount, 1)
-		logger.WithField("tweet", pt.GetTweet().Id).Infof("dlCount: %d", w.dlCount)
+		logger.WithField("tweet", pt.GetTweet().Id).Infof("dlCount: %d", atomic.LoadInt32(&w.dlCount))
+
+		// Signal the condition variable after updating dlCount
+		w.checkCond.L.Lock()
+		w.checkCond.Signal()
+		w.checkCond.L.Unlock()
+
 		if err == nil {
 			logger.WithField("tweet", pt.GetTweet().Id).Infoln("downloaded tweet successfully")
 			continue
