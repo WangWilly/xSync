@@ -29,137 +29,8 @@ func init() {
 ////////////////////////////////////////////////////////////////////////////////
 
 func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, users []heaphelper.UserWithinListEntity, dir string, autoFollow bool, additional []*resty.Client) ([]*dldto.InEntity, error) {
-	// uidToUser := make(map[uint64]*twitter.User)
-	// for _, u := range users {
-	// 	uidToUser[u.User.TwitterId] = u.User
-	// }
-
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
-
-	// userSmartPathToDepth := make(map[*smartpathdto.UserSmartPath]int)
-	// // 大顶堆，以用户深度
-	// userUserSmartPathHeap := utils.NewHeap(func(lhs, rhs *smartpathdto.UserSmartPath) bool {
-	// 	luser, ruser := uidToUser[lhs.Uid()], uidToUser[rhs.Uid()]
-	// 	lOnlyMater := luser.IsProtected && luser.Followstate == twitter.FS_FOLLOWING
-	// 	rOnlyMaster := ruser.IsProtected && ruser.Followstate == twitter.FS_FOLLOWING
-
-	// 	if lOnlyMater == rOnlyMaster {
-	// 		return userSmartPathToDepth[lhs] > userSmartPathToDepth[rhs]
-	// 	}
-	// 	return lOnlyMater // 优先让 master 获取只有他能看到的
-	// })
-
-	// // pre-process
-	// start := time.Now()
-	// deepest := 0
-	// missingTweets := 0
-	// updaterLogger := log.WithField("worker", "updating")
-	// {
-	// 	defer utils.PanicHandler(cancel)
-	// 	log.Infoln("start pre processing users")
-
-	// 	for _, userWithinList := range users {
-
-	// 		user := userWithinList.User
-	// 		if heaphelper.IsIngoreUser(user) {
-	// 			continue
-	// 		}
-
-	// 		var userSmartPath *smartpathdto.UserSmartPath
-	// 		maybeUserSmartPath, loaded := syncedUserSmartPaths.Load(user.TwitterId)
-	// 		if !loaded {
-	// 			var err error
-	// 			userSmartPath, err = heaphelper.SyncUserToDbAndGetSmartPath(db, user, dir)
-	// 			if err != nil {
-	// 				updaterLogger.WithField("user", user.Title()).Warnln("failed to update user or entity", err)
-	// 				continue
-	// 			}
-	// 			syncedUserSmartPaths.Store(user.TwitterId, userSmartPath)
-
-	// 			// 同步所有现存的指向此用户的符号链接
-	// 			linkds, err := database.GetUserLinks(db, user.TwitterId)
-	// 			if err != nil {
-	// 				updaterLogger.WithField("user", user.Title()).Warnln("failed to get links to user:", err)
-	// 			}
-	// 			upath, _ := userSmartPath.Path()
-	// 			for _, linkd := range linkds {
-	// 				if err = heaphelper.UpdateUserLink(linkd, db, upath); err != nil {
-	// 					updaterLogger.WithField("user", user.Title()).Warnln("failed to update link:", err)
-	// 				}
-	// 				sl, _ := syncedListUsers.LoadOrStore(int(linkd.ParentLstEntityId), &sync.Map{})
-	// 				syncedList := sl.(*sync.Map)
-	// 				syncedList.Store(user.TwitterId, struct{}{})
-	// 			}
-
-	// 			// 计算深度
-	// 			if user.MediaCount != 0 && user.IsVisiable() {
-	// 				missingTweets += max(0, user.MediaCount-int(userSmartPath.Record.MediaCount.Int32))
-	// 				userSmartPathToDepth[userSmartPath] = heaphelper.CalcUserDepth(int(userSmartPath.Record.MediaCount.Int32), user.MediaCount)
-	// 				userUserSmartPathHeap.Push(userSmartPath)
-	// 				deepest = max(deepest, userSmartPathToDepth[userSmartPath])
-	// 			}
-
-	// 			// 自动关注
-	// 			if user.IsProtected && user.Followstate == twitter.FS_UNFOLLOW && autoFollow {
-	// 				if err := twitter.FollowUser(ctx, client, user); err != nil {
-	// 					log.WithField("user", user.Title()).Warnln("failed to follow user:", err)
-	// 				} else {
-	// 					log.WithField("user", user.Title()).Debugln("follow request has been sent")
-	// 				}
-	// 			}
-	// 		} else {
-	// 			userSmartPath = maybeUserSmartPath.(*smartpathdto.UserSmartPath)
-	// 		}
-
-	// 		// 即便同步一个用户时也同步了所有指向此用户的链接，
-	// 		// 但此用户仍可能会是一个新的 “列表-用户”，所以判断此用户链接是否同步过，
-	// 		// 如果否，那么创建一个属于此列表的用户链接
-	// 		leid := userWithinList.Leid
-	// 		if leid == nil {
-	// 			continue
-	// 		}
-	// 		sl, _ := syncedListUsers.LoadOrStore(*leid, &sync.Map{})
-	// 		syncedList := sl.(*sync.Map)
-	// 		_, loaded = syncedList.LoadOrStore(user.TwitterId, struct{}{})
-	// 		if loaded {
-	// 			continue
-	// 		}
-
-	// 		// 为当前列表的新用户创建符号链接
-	// 		upath, _ := userSmartPath.Path()
-	// 		var linkname = userSmartPath.Name()
-
-	// 		curlink := &database.UserLink{}
-	// 		curlink.Name = linkname
-	// 		curlink.ParentLstEntityId = int32(*leid)
-	// 		curlink.Uid = user.TwitterId
-
-	// 		linkpath, err := curlink.Path(db)
-	// 		if err == nil {
-	// 			if err = os.Symlink(upath, linkpath); err == nil || os.IsExist(err) {
-	// 				err = database.CreateUserLink(db, curlink)
-	// 			}
-	// 		}
-	// 		if err != nil {
-	// 			updaterLogger.WithField("user", user.Title()).Warnln("failed to create link for user:", err)
-	// 		}
-	// 	}
-	// }
-
-	// if userUserSmartPathHeap.Empty() {
-	// 	return nil, nil
-	// }
-	// log.Debugln("preprocessing finish, elapsed:", time.Since(start))
-	// log.Debugln("real members:", userUserSmartPathHeap.Size())
-	// log.Debugln("missing tweets:", missingTweets)
-	// log.Debugln("deepest:", deepest)
-
-	// heapHelper := heaphelper.NewHelperDirect(
-	// 	uidToUser,
-	// 	userSmartPathToDepth,
-	// 	userUserSmartPathHeap,
-	// )
 
 	heapHelper := heaphelper.NewHelper(users)
 	heapHelper.MakeHeap(ctx, db, client, dir, autoFollow)
@@ -169,22 +40,19 @@ func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, u
 	log.Infoln("start downloading tweets")
 
 	// Create SimpleWorker for tweet media downloading
-	// Convert CancelCauseFunc to CancelFunc for SimpleWorker compatibility
-	ctxForSimpleWorker, cancelForSimpleWorker := context.WithCancel(ctx)
-	simpleWorker := workers.NewSimpleWorker[dldto.TweetDlMeta, dldto.TweetDlMeta](ctxForSimpleWorker, cancelForSimpleWorker, MaxDownloadRoutine)
+	simpleWorker := workers.NewSimpleWorker[dldto.TweetDlMeta](ctx, cancel, MaxDownloadRoutine)
 
 	// Create the original worker for heap processing and tweet downloading logic
-	worker := resolveworker.NewWorker(ctx, cancel, mediaDownloadHelper)
+	worker := resolveworker.NewWorker(mediaDownloadHelper)
 
 	// Define producer function that processes the heap
-	producer := func(ctx context.Context, output chan<- dldto.TweetDlMeta) ([]dldto.TweetDlMeta, error) {
-		unsent, err := worker.ProduceFromHeap(heapHelper, db, client, additional, output, simpleWorker.IncrementProduced)
-		return unsent, err
+	producer := func(ctx context.Context, cancel context.CancelCauseFunc, output chan<- dldto.TweetDlMeta) ([]dldto.TweetDlMeta, error) {
+		return worker.ProduceFromHeap(ctx, cancel, heapHelper, db, client, additional, output, simpleWorker.IncrementProduced)
 	}
 
 	// Define consumer function that downloads tweet media
-	consumer := func(ctx context.Context, input <-chan dldto.TweetDlMeta) []dldto.TweetDlMeta {
-		return worker.DownloadTweetMediaFromTweetChan(client, input)
+	consumer := func(ctx context.Context, cancel context.CancelCauseFunc, input <-chan dldto.TweetDlMeta) []dldto.TweetDlMeta {
+		return worker.DownloadTweetMediaFromTweetChan(ctx, cancel, client, input, simpleWorker.IncrementConsumed)
 	}
 
 	// Run the producer-consumer pipeline
@@ -229,37 +97,33 @@ func BatchDownloadTweet(ctx context.Context, client *resty.Client, tweetDlMetas 
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
-	// Create SimpleWorker for tweet downloading
-	ctxForSimpleWorker, cancelForSimpleWorker := context.WithCancel(ctx)
-	simpleWorker := workers.NewSimpleWorker[dldto.TweetDlMeta, dldto.TweetDlMeta](ctxForSimpleWorker, cancelForSimpleWorker, min(len(tweetDlMetas), MaxDownloadRoutine))
+	simpleWorker := workers.NewSimpleWorker[dldto.TweetDlMeta](ctx, cancel, min(len(tweetDlMetas), MaxDownloadRoutine))
 
 	mediaDownloadHelper := mediadownloadhelper.NewHelper()
-	worker := resolveworker.NewWorker(ctx, cancel, mediaDownloadHelper)
+	worker := resolveworker.NewWorker(mediaDownloadHelper)
 
 	// Define producer function that sends the tweet list
-	producer := func(ctx context.Context, output chan<- dldto.TweetDlMeta) ([]dldto.TweetDlMeta, error) {
-		var unsent []dldto.TweetDlMeta
-		for _, tweetDlMeta := range tweetDlMetas {
+	producer := func(ctx context.Context, cancel context.CancelCauseFunc, output chan<- dldto.TweetDlMeta) ([]dldto.TweetDlMeta, error) {
+		idx := 0
+	tweetDlMetasLoop:
+		for idx := range tweetDlMetas {
 			select {
 			case <-ctx.Done():
-				// Add remaining tweets to unsent list
-				for i := len(unsent); i < len(tweetDlMetas); i++ {
-					unsent = append(unsent, tweetDlMetas[i])
-				}
-				return unsent, ctx.Err()
-			case output <- tweetDlMeta:
+				break tweetDlMetasLoop
+			case output <- tweetDlMetas[idx]:
 				simpleWorker.IncrementProduced()
-			default:
-				// Channel is full or blocked, add to unsent
-				unsent = append(unsent, tweetDlMeta)
 			}
+		}
+		var unsent []dldto.TweetDlMeta
+		for ; idx < len(tweetDlMetas); idx++ {
+			unsent = append(unsent, tweetDlMetas[idx])
 		}
 		return unsent, nil
 	}
 
 	// Define consumer function that downloads tweet media
-	consumer := func(ctx context.Context, input <-chan dldto.TweetDlMeta) []dldto.TweetDlMeta {
-		return worker.DownloadTweetMediaFromTweetChan(client, input)
+	consumer := func(ctx context.Context, cancel context.CancelCauseFunc, input <-chan dldto.TweetDlMeta) []dldto.TweetDlMeta {
+		return worker.DownloadTweetMediaFromTweetChan(ctx, cancel, client, input, simpleWorker.IncrementConsumed)
 	}
 
 	// Run the producer-consumer pipeline

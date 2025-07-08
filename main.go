@@ -213,10 +213,10 @@ func main() {
 		for _, te := range toDump {
 			dumper.Push(te.Entity.Id(), te.Tweet)
 		}
-		// // 如果手动取消，不尝试重试，快速终止进程
-		// if ctx.Err() != context.Canceled && !noRetry {
-		// 	retryFailedTweets(ctx, dumper, db, client)
-		// }
+		// 如果手动取消，不尝试重试，快速终止进程
+		if ctx.Err() != context.Canceled && !noRetry {
+			retryFailedTweets(ctx, dumper, db, client)
+		}
 	}()
 
 	////////////////////////////////////////////////////////////////////////////
@@ -228,7 +228,6 @@ func main() {
 	log.Infoln("start working for...")
 	tasks.PrintTask(task)
 
-	// todump, err = downloading.BatchDownloadAny(ctx, client, db, task, pathHelper.Root, pathHelper.Users, autoFollow, addtionalClients)
 	usersWithinListEntity, err := heaphelper.WrapToUsersWithinListEntity(ctx, client, db, task, pathHelper.Root)
 	if err != nil || len(usersWithinListEntity) == 0 {
 		log.Fatalln("failed to wrap users within list entity:", err)

@@ -9,13 +9,13 @@ import (
 )
 
 func TestSimpleWorker_BasicUsage(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
 
-	worker := NewSimpleWorker[int, int](ctx, cancel, 2)
+	worker := NewSimpleWorker[int](ctx, cancel, 2)
 
 	// Producer that generates 10 items
-	producer := func(ctx context.Context, output chan<- int) ([]int, error) {
+	producer := func(ctx context.Context, cancel context.CancelCauseFunc, output chan<- int) ([]int, error) {
 		var unsent []int
 		for i := 0; i < 10; i++ {
 			select {
@@ -33,7 +33,7 @@ func TestSimpleWorker_BasicUsage(t *testing.T) {
 	}
 
 	// Consumer that processes items and fails odd numbers
-	consumer := func(ctx context.Context, input <-chan int) []int {
+	consumer := func(ctx context.Context, cancel context.CancelCauseFunc, input <-chan int) []int {
 		var failed []int
 
 		for {
@@ -88,18 +88,18 @@ func TestSimpleWorker_BasicUsage(t *testing.T) {
 }
 
 func TestSimpleWorker_ProducerError(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
 
-	worker := NewSimpleWorker[int, int](ctx, cancel, 1)
+	worker := NewSimpleWorker[int](ctx, cancel, 1)
 
 	// Producer that returns an error
-	producer := func(ctx context.Context, output chan<- int) ([]int, error) {
+	producer := func(ctx context.Context, cancel context.CancelCauseFunc, output chan<- int) ([]int, error) {
 		return nil, fmt.Errorf("producer error")
 	}
 
 	// Consumer that just consumes
-	consumer := func(ctx context.Context, input <-chan int) []int {
+	consumer := func(ctx context.Context, cancel context.CancelCauseFunc, input <-chan int) []int {
 		var failed []int
 		for item := range input {
 			worker.IncrementConsumed()
@@ -120,12 +120,12 @@ func TestSimpleWorker_ProducerError(t *testing.T) {
 }
 
 func TestSimpleWorker_ContextCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancelCause(context.Background())
 
-	worker := NewSimpleWorker[int, int](ctx, cancel, 1)
+	worker := NewSimpleWorker[int](ctx, cancel, 1)
 
 	// Producer that generates items slowly
-	producer := func(ctx context.Context, output chan<- int) ([]int, error) {
+	producer := func(ctx context.Context, cancel context.CancelCauseFunc, output chan<- int) ([]int, error) {
 		var unsent []int
 		for i := 0; i < 100; i++ {
 			select {
@@ -144,7 +144,7 @@ func TestSimpleWorker_ContextCancellation(t *testing.T) {
 	}
 
 	// Consumer that processes items
-	consumer := func(ctx context.Context, input <-chan int) []int {
+	consumer := func(ctx context.Context, cancel context.CancelCauseFunc, input <-chan int) []int {
 		var failed []int
 		for {
 			select {
@@ -163,7 +163,7 @@ func TestSimpleWorker_ContextCancellation(t *testing.T) {
 	// Cancel context after 50ms
 	go func() {
 		time.Sleep(50 * time.Millisecond)
-		cancel()
+		cancel(nil)
 	}()
 
 	result := worker.Process(producer, consumer, 5)
