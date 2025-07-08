@@ -213,10 +213,10 @@ func main() {
 		for _, te := range toDump {
 			dumper.Push(te.Entity.Id(), te.Tweet)
 		}
-		// 如果手动取消，不尝试重试，快速终止进程
-		if ctx.Err() != context.Canceled && !noRetry {
-			retryFailedTweets(ctx, dumper, db, client)
-		}
+		// // 如果手动取消，不尝试重试，快速终止进程
+		// if ctx.Err() != context.Canceled && !noRetry {
+		// 	retryFailedTweets(ctx, dumper, db, client)
+		// }
 	}()
 
 	////////////////////////////////////////////////////////////////////////////

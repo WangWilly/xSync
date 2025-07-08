@@ -3,6 +3,7 @@ package heaphelper
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -19,12 +20,15 @@ import (
 
 type helper struct {
 	uidToUserMap         map[uint64]*twitter.User
+	users                []UserWithinListEntity
 	userSmartPathToDepth map[*smartpathdto.UserSmartPath]int
 
 	syncedUserSmartPaths sync.Map // map[uint64]*smartpathdto.UserSmartPath
 	syncedListUsers      sync.Map // map[int]*sync.Map, where int is ListEntityId, and *sync.Map is map[uint64]struct{}
 
 	heap *utils.Heap[*smartpathdto.UserSmartPath]
+
+	mtx sync.Mutex
 }
 
 func NewHelper(users []UserWithinListEntity) *helper {
@@ -35,12 +39,14 @@ func NewHelper(users []UserWithinListEntity) *helper {
 
 	return &helper{
 		uidToUserMap:         uidToUserMap,
+		users:                users,
 		userSmartPathToDepth: make(map[*smartpathdto.UserSmartPath]int),
 
 		syncedUserSmartPaths: sync.Map{},
 		syncedListUsers:      sync.Map{},
 
 		heap: nil,
+		mtx:  sync.Mutex{},
 	}
 }
 
@@ -65,17 +71,21 @@ func (h *helper) MakeHeap(
 	ctx context.Context,
 	db *sqlx.DB,
 	client *resty.Client,
-	users []UserWithinListEntity,
 	dir string,
 	autoFollow bool,
 ) error {
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+
 	if h.heap != nil {
 		return errors.New("heap is already initialized, call MakeHeap only once")
 	}
 
 	ctx, cancel := context.WithCancelCause(ctx)
-	defer cancel(nil)
-	defer utils.PanicHandler(cancel)
+	defer func() {
+		fmt.Println("Helper MakeHeap deferred, canceling context")
+		utils.PanicHandler(cancel)
+	}()
 
 	logger := log.WithField("worker", "updating")
 	logger.Infoln("start pre processing users")
@@ -84,8 +94,9 @@ func (h *helper) MakeHeap(
 	debugDeepest := 0
 	debugMissingTweets := 0
 	userUserSmartPathRaw := make([]*smartpathdto.UserSmartPath, 0)
-	for _, userWithinList := range users {
+	for _, userWithinList := range h.users {
 		user := userWithinList.User
+		logger.WithField("user", user.Title()).Infoln("processing user")
 		if IsIngoreUser(user) {
 			continue
 		}
@@ -93,6 +104,8 @@ func (h *helper) MakeHeap(
 		var userSmartPath *smartpathdto.UserSmartPath
 		maybeUserSmartPath, loaded := h.syncedUserSmartPaths.Load(user.TwitterId)
 		if !loaded {
+			logger.WithField("user", user.Title()).Infoln("user not found in syncedUserSmartPaths, syncing...")
+
 			var err error
 			userSmartPath, err = SyncUserToDbAndGetSmartPath(db, user, dir)
 			if err != nil {
@@ -108,6 +121,8 @@ func (h *helper) MakeHeap(
 			}
 			upath, _ := userSmartPath.Path()
 			for _, linkd := range linkds {
+				logger.WithField("link", linkd.Name).Infoln("updating link for user")
+
 				if err = UpdateUserLink(linkd, db, upath); err != nil {
 					logger.WithField("user", user.Title()).Warnln("failed to update link:", err)
 				}
@@ -127,6 +142,8 @@ func (h *helper) MakeHeap(
 
 			// 自动关注
 			if user.IsProtected && user.Followstate == twitter.FS_UNFOLLOW && autoFollow {
+				logger.WithField("user", user.Title()).Infoln("user is protected and not followed, trying to follow")
+
 				if err := twitter.FollowUser(ctx, client, user); err != nil {
 					log.WithField("user", user.Title()).Warnln("failed to follow user:", err)
 				} else {
@@ -134,24 +151,29 @@ func (h *helper) MakeHeap(
 				}
 			}
 		} else {
+			logger.WithField("user", user.Title()).Infoln("user found in syncedUserSmartPaths, using existing smart path")
 			userSmartPath = maybeUserSmartPath.(*smartpathdto.UserSmartPath)
 		}
 
 		// 即便同步一个用户时也同步了所有指向此用户的链接，
 		// 但此用户仍可能会是一个新的 “列表-用户”，所以判断此用户链接是否同步过，
 		// 如果否，那么创建一个属于此列表的用户链接
+		logger.WithField("user", user.Title()).Infoln("checking if user is in list")
 		leid := userWithinList.Leid
 		if leid == nil {
+			logger.WithField("user", user.Title()).Infoln("list entity ID is nil, skipping user")
 			continue
 		}
 		sl, _ := h.syncedListUsers.LoadOrStore(*leid, &sync.Map{})
 		syncedList := sl.(*sync.Map)
 		_, loaded = syncedList.LoadOrStore(user.TwitterId, struct{}{})
 		if loaded {
+			logger.WithField("user", user.Title()).Infoln("user already exists in list, skipping")
 			continue
 		}
 
 		// 为当前列表的新用户创建符号链接
+		logger.WithField("user", user.Title()).Infoln("creating link for user in list")
 		upath, _ := userSmartPath.Path()
 		var linkname = userSmartPath.Name()
 
@@ -169,6 +191,7 @@ func (h *helper) MakeHeap(
 		if err != nil {
 			logger.WithField("user", user.Title()).Warnln("failed to create link for user:", err)
 		}
+		logger.WithField("user", user.Title()).Infoln("link created successfully")
 	}
 
 	lessFunc := func(lhs, rhs *smartpathdto.UserSmartPath) bool {
@@ -197,6 +220,9 @@ func (h *helper) MakeHeap(
 }
 
 func (h *helper) GetHeap() *utils.Heap[*smartpathdto.UserSmartPath] {
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+
 	if h.heap == nil {
 		panic("heap is not initialized, call MakeHeap first")
 	}
@@ -204,6 +230,9 @@ func (h *helper) GetHeap() *utils.Heap[*smartpathdto.UserSmartPath] {
 }
 
 func (h *helper) GetDepth(userSmartPath *smartpathdto.UserSmartPath) int {
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+
 	if depth, ok := h.userSmartPathToDepth[userSmartPath]; ok {
 		return depth
 	}
@@ -211,6 +240,9 @@ func (h *helper) GetDepth(userSmartPath *smartpathdto.UserSmartPath) int {
 }
 
 func (h *helper) GetUserByTwitterId(twitterId uint64) *twitter.User {
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+
 	if user, ok := h.uidToUserMap[twitterId]; ok {
 		return user
 	}
