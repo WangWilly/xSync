@@ -14,6 +14,4 @@ func PanicHandler(cancel context.CancelCauseFunc) {
 		fmt.Printf("Recovered from panic: %v\n%s\n", r, buf[:n])
 		return
 	}
-
-	// cancel(nil) // If no panic, just cancel with nil error
 }

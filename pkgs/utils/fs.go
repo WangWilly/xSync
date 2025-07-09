@@ -20,6 +20,7 @@ var (
 // reserve 5 bytes for suffix
 const maxFileNameLen = 250
 
+// TODO: file name length limit is 255 bytes
 func ToLegalWindowsFileName(name string) string {
 	// 将字节切片转换为字符串
 	// 使用正则表达式进行替换

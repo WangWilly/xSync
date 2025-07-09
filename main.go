@@ -202,7 +202,7 @@ func main() {
 	////////////////////////////////////////////////////////////////////////////
 	// Failed Tweets Dumping and Retry (Deferred)
 	////////////////////////////////////////////////////////////////////////////
-	var toDump = make([]*dldto.InEntity, 0)
+	var toDump = make([]dldto.TweetDlMeta, 0)
 	defer func() {
 		dumper.Dump(pathHelper.ErrorJ)
 		log.Infof("%d tweets have been dumped and will be downloaded the next time the program runs", dumper.Count())
@@ -211,7 +211,7 @@ func main() {
 	// retry failed tweets at exit
 	defer func() {
 		for _, te := range toDump {
-			dumper.Push(te.Entity.Id(), te.Tweet)
+			dumper.Push(te.GetUserSmartPath().Id(), te.GetTweet())
 		}
 		// 如果手动取消，不尝试重试，快速终止进程
 		if ctx.Err() != context.Canceled && !noRetry {

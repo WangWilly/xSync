@@ -15,3 +15,6 @@ func (pt InDir) GetTweet() *twitter.Tweet {
 func (pt InDir) GetPath() string {
 	return pt.path
 }
+
+// TODO:
+// func (pt InDir) GetUserSmartPath()

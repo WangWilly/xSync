@@ -74,73 +74,63 @@ func (sw *SimpleWorker[T]) Process(
 	consumer ConsumerFunc[T],
 	bufferSize int,
 ) ProcessResult[T] {
+	logger := log.WithField("function", "SimpleWorker.Process").
+		WithField("maxWorkers", sw.maxWorkers).
+		WithField("bufferSize", bufferSize)
+
 	startTime := time.Now()
-
-	// Create work channel
-	workChan := make(chan T, bufferSize)
-
-	// Producer error and unsent items channels
-	producerErr := make(chan error, 1)
 
 	var allFailed []T
 	var failedMutex sync.Mutex
 
-	// Start producer
+	workChan := make(chan T, bufferSize)
+	var producerErr error
 	go func() {
 		defer close(workChan)
+
+		logger := logger.WithField("worker", "producer")
+
 		unsents, err := producer(sw.ctx, sw.cancel, workChan)
+		logger.WithField("unsentCount", len(unsents)).
+			WithField("error", err).
+			Debug("producer finished")
+
 		if err != nil {
-			select {
-			case producerErr <- err:
-			default:
-			}
+			producerErr = err
+			logger.WithError(err).Error("producer encountered an error")
+			return
 		}
+
 		failedMutex.Lock()
 		allFailed = append(allFailed, unsents...)
 		failedMutex.Unlock()
 	}()
 
-	// Start consumers
 	var wg sync.WaitGroup
-
 	for i := 0; i < sw.maxWorkers; i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
 
-			logger := log.WithField("workerID", workerID)
-			logger.Debug("consumer started")
-
+			logger := logger.WithField("workerID", workerID)
 			failed := consumer(sw.ctx, sw.cancel, workChan)
+			logger.WithField("failedCount", len(failed)).Debug("consumer finished")
 
 			failedMutex.Lock()
 			allFailed = append(allFailed, failed...)
 			failedMutex.Unlock()
-
-			logger.WithField("failedCount", len(failed)).Debug("consumer finished")
 		}(i)
 	}
-
-	// Wait for all consumers to finish
 	wg.Wait()
-
-	// Check for producer errors
-	var err error
-	select {
-	case err = <-producerErr:
-	default:
-	}
-
-	duration := time.Since(startTime)
 
 	return ProcessResult[T]{
 		Failed: allFailed,
-		Error:  err,
+		Error:  producerErr,
 		Stats: ProcessStats{
 			Produced: atomic.LoadInt64(&sw.produced),
 			Consumed: atomic.LoadInt64(&sw.consumed),
 			Failed:   int64(len(allFailed)),
-			Duration: duration,
+			Duration: time.Since(startTime),
 		},
 	}
 }

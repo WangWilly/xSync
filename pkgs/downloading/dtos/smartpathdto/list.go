@@ -99,6 +99,6 @@ func (le *ListSmartPath) Id() int {
 	return int(le.record.Id.Int32)
 }
 
-func (le *ListSmartPath) Recorded() bool {
+func (le *ListSmartPath) IsSyncToDb() bool {
 	return le.Created
 }

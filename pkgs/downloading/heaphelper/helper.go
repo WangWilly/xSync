@@ -3,7 +3,6 @@ package heaphelper
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -82,13 +81,12 @@ func (h *helper) MakeHeap(
 	}
 
 	ctx, cancel := context.WithCancelCause(ctx)
-	defer func() {
-		fmt.Println("Helper MakeHeap deferred, canceling context")
-		utils.PanicHandler(cancel)
-	}()
-
 	logger := log.WithField("worker", "updating")
 	logger.Infoln("start pre processing users")
+
+	defer func() {
+		utils.PanicHandler(cancel)
+	}()
 
 	tic := time.Now()
 	debugDeepest := 0
@@ -145,9 +143,9 @@ func (h *helper) MakeHeap(
 				logger.WithField("user", user.Title()).Infoln("user is protected and not followed, trying to follow")
 
 				if err := twitter.FollowUser(ctx, client, user); err != nil {
-					log.WithField("user", user.Title()).Warnln("failed to follow user:", err)
+					logger.WithField("user", user.Title()).Warnln("failed to follow user:", err)
 				} else {
-					log.WithField("user", user.Title()).Debugln("follow request has been sent")
+					logger.WithField("user", user.Title()).Debugln("follow request has been sent")
 				}
 			}
 		} else {
@@ -195,7 +193,7 @@ func (h *helper) MakeHeap(
 	}
 
 	lessFunc := func(lhs, rhs *smartpathdto.UserSmartPath) bool {
-		luser, ruser := h.uidToUserMap[lhs.Uid()], h.uidToUserMap[rhs.Uid()]
+		luser, ruser := h.uidToUserMap[lhs.TwitterId()], h.uidToUserMap[rhs.TwitterId()]
 		lOnlyMater := luser.IsProtected && luser.Followstate == twitter.FS_FOLLOWING
 		rOnlyMaster := ruser.IsProtected && ruser.Followstate == twitter.FS_FOLLOWING
 

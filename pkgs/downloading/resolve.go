@@ -16,73 +16,49 @@ import (
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Global state variables
 var (
 	MaxDownloadRoutine int
 )
 
-// init initializes default configuration values
 func init() {
 	MaxDownloadRoutine = min(100, runtime.GOMAXPROCS(0)*10)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, users []heaphelper.UserWithinListEntity, dir string, autoFollow bool, additional []*resty.Client) ([]*dldto.InEntity, error) {
+func BatchUserDownload(ctx context.Context, client *resty.Client, db *sqlx.DB, users []heaphelper.UserWithinListEntity, dir string, autoFollow bool, additional []*resty.Client) ([]dldto.TweetDlMeta, error) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
+	logger := log.WithField("function", "BatchUserDownload")
+	logger.Infoln("starting batch user download")
+
 	heapHelper := heaphelper.NewHelper(users)
 	heapHelper.MakeHeap(ctx, db, client, dir, autoFollow)
-	log.Infof("heap size: %d\n", heapHelper.GetHeap().Size())
-
 	mediaDownloadHelper := mediadownloadhelper.NewHelper()
-	log.Infoln("start downloading tweets")
-
-	// Create SimpleWorker for tweet media downloading
 	simpleWorker := workers.NewSimpleWorker[dldto.TweetDlMeta](ctx, cancel, MaxDownloadRoutine)
-
-	// Create the original worker for heap processing and tweet downloading logic
 	worker := resolveworker.NewWorker(mediaDownloadHelper)
 
-	// Define producer function that processes the heap
 	producer := func(ctx context.Context, cancel context.CancelCauseFunc, output chan<- dldto.TweetDlMeta) ([]dldto.TweetDlMeta, error) {
-		return worker.ProduceFromHeap(ctx, cancel, heapHelper, db, client, additional, output, simpleWorker.IncrementProduced)
+		return worker.ProduceFromHeapToTweetChan(ctx, cancel, heapHelper, db, client, additional, output, simpleWorker.IncrementProduced)
 	}
-
-	// Define consumer function that downloads tweet media
 	consumer := func(ctx context.Context, cancel context.CancelCauseFunc, input <-chan dldto.TweetDlMeta) []dldto.TweetDlMeta {
 		return worker.DownloadTweetMediaFromTweetChan(ctx, cancel, client, input, simpleWorker.IncrementConsumed)
 	}
 
-	// Run the producer-consumer pipeline
 	result := simpleWorker.Process(producer, consumer, MaxDownloadRoutine)
+	logger.WithFields(log.Fields{
+		"produced": result.Stats.Produced,
+		"consumed": result.Stats.Consumed,
+		"failed":   result.Stats.Failed,
+		"duration": result.Stats.Duration,
+	}).Info("finished downloading tweets")
 
-	// Convert failed tweets to InEntity format
-	fails := make([]*dldto.InEntity, 0, len(result.Failed))
-	for _, failedTweet := range result.Failed {
-		if inEntity, ok := failedTweet.(*dldto.InEntity); ok {
-			fails = append(fails, inEntity)
-		}
-	}
-
-	// Log results
-	log.WithFields(log.Fields{
-		"produced":    result.Stats.Produced,
-		"consumed":    result.Stats.Consumed,
-		"failed":      result.Stats.Failed,
-		"duration":    result.Stats.Duration,
-		"failedCount": len(fails),
-		"totalCount":  heapHelper.GetHeap().Size(),
-	}).Info("[BatchDownloadTweet] finished downloading tweets using SimpleWorker")
-
-	// Check for producer errors
 	if result.Error != nil {
-		log.WithError(result.Error).Error("Producer error during tweet download")
-		return fails, result.Error
+		logger.WithError(result.Error).Error("Producer error during tweet download")
+		return result.Failed, result.Error
 	}
-
-	return fails, context.Cause(ctx)
+	return result.Failed, context.Cause(ctx)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -97,12 +73,13 @@ func BatchDownloadTweet(ctx context.Context, client *resty.Client, tweetDlMetas 
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
-	simpleWorker := workers.NewSimpleWorker[dldto.TweetDlMeta](ctx, cancel, min(len(tweetDlMetas), MaxDownloadRoutine))
+	logger := log.WithField("function", "BatchDownloadTweet")
+	logger.WithField("count", len(tweetDlMetas)).Info("starting batch tweet download")
 
+	simpleWorker := workers.NewSimpleWorker[dldto.TweetDlMeta](ctx, cancel, min(len(tweetDlMetas), MaxDownloadRoutine))
 	mediaDownloadHelper := mediadownloadhelper.NewHelper()
 	worker := resolveworker.NewWorker(mediaDownloadHelper)
 
-	// Define producer function that sends the tweet list
 	producer := func(ctx context.Context, cancel context.CancelCauseFunc, output chan<- dldto.TweetDlMeta) ([]dldto.TweetDlMeta, error) {
 		idx := 0
 	tweetDlMetasLoop:
@@ -120,28 +97,23 @@ func BatchDownloadTweet(ctx context.Context, client *resty.Client, tweetDlMetas 
 		}
 		return unsent, nil
 	}
-
-	// Define consumer function that downloads tweet media
 	consumer := func(ctx context.Context, cancel context.CancelCauseFunc, input <-chan dldto.TweetDlMeta) []dldto.TweetDlMeta {
 		return worker.DownloadTweetMediaFromTweetChan(ctx, cancel, client, input, simpleWorker.IncrementConsumed)
 	}
 
-	// Run the producer-consumer pipeline
 	result := simpleWorker.Process(producer, consumer, min(len(tweetDlMetas), MaxDownloadRoutine))
-
-	if result.Error != nil {
-		log.WithError(result.Error).Error("Producer error during tweet download")
-	}
-
-	log.WithFields(log.Fields{
+	logger.WithFields(log.Fields{
 		"produced": result.Stats.Produced,
 		"consumed": result.Stats.Consumed,
 		"failed":   result.Stats.Failed,
 		"duration": result.Stats.Duration,
-	}).Info("BatchDownloadTweet completed using SimpleWorker")
+	}).Info("completed")
 
+	if result.Error != nil {
+		logger.WithError(result.Error).Error("Producer error during tweet download")
+	}
 	if len(result.Failed) > 0 {
-		log.WithField("worker", "downloading").Warnf("failed to download %d tweets", len(result.Failed))
+		logger.Warnf("failed to download %d tweets", len(result.Failed))
 		return result.Failed
 	}
 	return nil

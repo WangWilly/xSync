@@ -160,7 +160,7 @@ func syncLstAndGetMembers(ctx context.Context, client *resty.Client, db *sqlx.DB
 }
 
 func SyncPath(path smartpathdto.SmartPath, expectedName string) error {
-	if !path.Recorded() {
+	if !path.IsSyncToDb() {
 		return path.Create(expectedName)
 	}
 
