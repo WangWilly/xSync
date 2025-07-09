@@ -224,9 +224,9 @@ func testSyncUser(t *testing.T, name string, uid int, parentdir string, exist bo
 	}
 
 	// 创建状态正确
-	if ue.Created && !exist {
+	if ue.IsSyncToDb() && !exist {
 		t.Errorf("ue.Created = true, want false")
-	} else if !ue.Created && exist {
+	} else if !ue.IsSyncToDb() && exist {
 		t.Errorf("ue.created = false, want true")
 	}
 
@@ -242,8 +242,8 @@ func testSyncUser(t *testing.T, name string, uid int, parentdir string, exist bo
 	// 记录正确
 	verifyUserRecord(t, ue, uint64(uid), name, parentdir)
 
-	if ue.Uid() != uint64(uid) {
-		t.Errorf("uid: %d, want %d", ue.Uid(), uid)
+	if ue.TwitterId() != uint64(uid) {
+		t.Errorf("uid: %d, want %d", ue.TwitterId(), uid)
 	}
 	return ue
 }

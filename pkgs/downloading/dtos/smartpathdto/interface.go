@@ -8,5 +8,5 @@ type SmartPath interface {
 	Remove() error
 	Name() string
 	Id() int
-	Recorded() bool
+	IsSyncToDb() bool
 }

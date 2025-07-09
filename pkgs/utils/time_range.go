@@ -3,6 +3,6 @@ package utils
 import "time"
 
 type TimeRange struct {
-	Min time.Time
-	Max time.Time
+	Begin time.Time
+	End   time.Time
 }

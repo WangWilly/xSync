@@ -66,53 +66,40 @@ func newUser(ctx context.Context, client *resty.Client, url string) (*User, erro
 	return parseUserResp(resp.Body())
 }
 
+func (u *User) GetAllMeidas(ctx context.Context, client *resty.Client) ([]*Tweet, error) {
+	// Get all media tweets for the user without a time range
+	return u.GetMeidas(ctx, client, utils.TimeRange{})
+}
+
 // GetMeidas retrieves all media tweets for the user within an optional time range
-func (u *User) GetMeidas(ctx context.Context, client *resty.Client, timeRange *utils.TimeRange) ([]*Tweet, error) {
+func (u *User) GetMeidas(ctx context.Context, client *resty.Client, timeRange utils.TimeRange) ([]*Tweet, error) {
 	if !u.IsVisiable() {
 		return nil, nil
 	}
 
-	api := userMedia{}
-	api.count = 100
-	api.cursor = ""
-	api.userId = u.TwitterId
-
+	api := DefaultUserMediaQuery(u.TwitterId)
 	results := make([]*Tweet, 0)
-
-	var minTime *time.Time
-	var maxTime *time.Time
-
-	if timeRange != nil {
-		minTime = &timeRange.Min
-		maxTime = &timeRange.Max
-	}
-
 	for {
-		currentTweets, next, err := u.getMediasOnePage(ctx, &api, client)
+		currentTweets, next, err := u.getMediasOnePage(ctx, api, client)
 		if err != nil {
 			return nil, err
 		}
 
 		if len(currentTweets) == 0 {
-			break // empty page
+			break
 		}
 
 		api.SetCursor(next)
 
-		if timeRange == nil {
-			results = append(results, currentTweets...)
-			continue
-		}
-
 		// 筛选推文，并判断是否获取下页
-		cutMin, cutMax, currentTweets := filterTweetsByTimeRange(currentTweets, minTime, maxTime)
+		cutMin, cutMax, currentTweets := filterTweetsByTimeRange(currentTweets, timeRange.Begin, timeRange.End)
 		results = append(results, currentTweets...)
 
 		if cutMin {
 			break
 		}
 		if cutMax && len(currentTweets) != 0 {
-			maxTime = nil
+			timeRange.End = time.Time{}
 		}
 	}
 	return results, nil
@@ -134,7 +121,7 @@ func (u *User) IsVisiable() bool {
 }
 
 // getMediasOnePage retrieves one page of media tweets for the user
-func (u *User) getMediasOnePage(ctx context.Context, api *userMedia, client *resty.Client) ([]*Tweet, string, error) {
+func (u *User) getMediasOnePage(ctx context.Context, api *userMediaQuery, client *resty.Client) ([]*Tweet, string, error) {
 	if !u.IsVisiable() {
 		return nil, "", nil
 	}
@@ -214,30 +201,31 @@ func itemContentsToTweets(itemContents []gjson.Result) []*Tweet {
 }
 
 // filterTweetsByTimeRange filters tweets by time range from a reverse-ordered slice
-// 在逆序切片中，筛选出在 timerange 范围内的推文
-func filterTweetsByTimeRange(tweets []*Tweet, min *time.Time, max *time.Time) (cutMin bool, cutMax bool, res []*Tweet) {
-	n := len(tweets)
+func filterTweetsByTimeRange(tweetsFromLatestToEarliest []*Tweet, timeBegin time.Time, timeEnd time.Time) (cutMin bool, cutMax bool, res []*Tweet) {
+	n := len(tweetsFromLatestToEarliest)
 	begin, end := 0, n
 
 	// 从左到右查找第一个小于 min 的推文
-	if min != nil && !min.IsZero() {
-		for i := 0; i < n; i++ {
-			if !tweets[i].CreatedAt.After(*min) {
-				end = i // 找到第一个不大于 min 的推文位置
-				cutMin = true
-				break
+	if !timeBegin.IsZero() {
+		for i := range n {
+			if tweetsFromLatestToEarliest[i].CreatedAt.After(timeBegin) {
+				continue
 			}
+			end = i // 找到第一个不大于 min 的推文位置
+			cutMin = true
+			break
 		}
 	}
 
 	// 从右到左查找最后一个大于 max 的推文
-	if max != nil && !max.IsZero() {
+	if !timeEnd.IsZero() {
 		for i := n - 1; i >= 0; i-- {
-			if !tweets[i].CreatedAt.Before(*max) {
-				begin = i + 1 // 找到第一个不小于 max 的推文位置
-				cutMax = true
-				break
+			if tweetsFromLatestToEarliest[i].CreatedAt.Before(timeEnd) {
+				continue
 			}
+			begin = i + 1 // 找到第一个不小于 max 的推文位置
+			cutMax = true
+			break
 		}
 	}
 
@@ -246,7 +234,7 @@ func filterTweetsByTimeRange(tweets []*Tweet, min *time.Time, max *time.Time) (c
 		return cutMin, cutMax, nil
 	}
 
-	res = tweets[begin:end]
+	res = tweetsFromLatestToEarliest[begin:end]
 	return
 }
 

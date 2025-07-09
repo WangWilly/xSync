@@ -4,9 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
-	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
@@ -15,340 +14,253 @@ import (
 	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/go-resty/resty/v2"
 	"github.com/jmoiron/sqlx"
-	"github.com/panjf2000/ants/v2"
 	log "github.com/sirupsen/logrus"
 )
 
 type worker struct {
-	ctx    context.Context
-	cancel context.CancelCauseFunc
-
 	mediaDownloadHelper MediaDownloadHelper
 
-	userTweetRateLimit     int
-	userTweetMaxConcurrent int // avoid DownstreamOverCapacityError
-
-	genCount  int32
-	dlCount   int32
-	checkCond sync.Cond
+	// config
+	pushTimeout time.Duration
 }
 
-func NewWorker(ctx context.Context, cancel context.CancelCauseFunc, mediaDownloadHelper MediaDownloadHelper) *worker {
+func NewWorker(mediaDownloadHelper MediaDownloadHelper) *worker {
 	return &worker{
-		ctx:    ctx,
-		cancel: cancel,
-
 		mediaDownloadHelper: mediaDownloadHelper,
-
-		userTweetRateLimit:     500, // TODO: make configurable
-		userTweetMaxConcurrent: 100, //
-
-		genCount:  0,
-		dlCount:   0,
-		checkCond: sync.Cond{L: &sync.Mutex{}},
+		pushTimeout:         120 * time.Second,
 	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (w *worker) DownloadTweetMediaFromHeap(
+func (w *worker) ProduceFromHeapToTweetChan(
+	ctx context.Context,
+	cancel context.CancelCauseFunc,
 	heapHelper HeapHelper,
 	db *sqlx.DB,
 	client *resty.Client,
 	additional []*resty.Client,
-	maxDownloadRoutine int,
-) error {
-	tweetChan := make(chan dldto.TweetDlMeta, maxDownloadRoutine)
-	errChan := make(chan dldto.TweetDlMeta)
-
-	return w.DownloadTweetMediaFromHeapWithChan(
-		heapHelper,
-		db,
-		client,
-		additional,
-		maxDownloadRoutine,
-		tweetChan,
-		errChan,
-	)
-}
-
-func (w *worker) DownloadTweetMediaFromHeapWithChan(
-	heapHelper HeapHelper,
-	db *sqlx.DB,
-	client *resty.Client,
-	additional []*resty.Client,
-	maxDownloadRoutine int,
-	tweetChan chan dldto.TweetDlMeta,
-	errChan chan dldto.TweetDlMeta,
-) error {
-	producerPool, err := ants.NewPool(min(w.userTweetMaxConcurrent, heapHelper.GetHeap().Size()))
-	if err != nil {
-		return err
-	}
-	defer ants.Release()
-
-	w.pooledSourceFromHeap(producerPool, heapHelper, db, client, additional, tweetChan)
-
-	go func() {
-		defer close(tweetChan)
-		for {
-			w.checkCond.L.Lock()
-			defer w.checkCond.L.Unlock()
-
-			if w.genCount == w.dlCount {
-				return
-			}
-		}
-	}()
-
-	consumerWg := sync.WaitGroup{}
-	for range maxDownloadRoutine {
-		consumerWg.Add(1)
-		go func() {
-			defer consumerWg.Done()
-			w.DownloadTweetMediaFromTweetChan(client, errChan, tweetChan)
-		}()
-	}
-	consumerWg.Wait()
-
-	return nil
-}
-
-func (w *worker) DownloadTweetMediaFromList(
-	tweetDlMetas []dldto.TweetDlMeta,
-	client *resty.Client,
-	maxDownloadRoutine int,
+	output chan<- dldto.TweetDlMeta,
+	incrementProduced func(),
 ) ([]dldto.TweetDlMeta, error) {
-	tweetChan := make(chan dldto.TweetDlMeta, maxDownloadRoutine)
-	errChan := make(chan dldto.TweetDlMeta)
+	logger := log.WithField("function", "ProduceFromHeap")
 
-	for _, pt := range tweetDlMetas {
-		w.genCount++
-		tweetChan <- pt
-	}
-	go func() {
-		defer close(tweetChan)
-		for {
-			w.checkCond.L.Lock()
-			defer w.checkCond.L.Unlock()
+	var unsentTweets []dldto.TweetDlMeta
 
-			if w.genCount == w.dlCount {
-				return
-			}
-		}
-	}()
-
-	consumerWg := sync.WaitGroup{}
-	for range maxDownloadRoutine {
-		consumerWg.Add(1)
-		go func() {
-			defer consumerWg.Done()
-			w.DownloadTweetMediaFromTweetChan(client, errChan, tweetChan)
-		}()
-	}
-	notYetDownloaded := make([]dldto.TweetDlMeta, 0)
-	for pt := range errChan {
-		if pt == nil {
-			continue
-		}
-		notYetDownloaded = append(notYetDownloaded, pt)
-	}
-
-	consumerWg.Wait()
-
-	if len(notYetDownloaded) > 0 {
-		log.WithField("worker", "downloading").Warnf("failed to download %d tweets", len(notYetDownloaded))
-		return notYetDownloaded, fmt.Errorf("failed to download %d tweets", len(notYetDownloaded))
-	}
-
-	return nil, nil
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-func (w *worker) pooledSourceFromHeap(
-	producerPool *ants.Pool,
-	heapHelper HeapHelper,
-	db *sqlx.DB,
-	client *resty.Client,
-	additional []*resty.Client,
-	tweetChan chan<- dldto.TweetDlMeta,
-) {
 	clients := make([]*resty.Client, 0)
 	clients = append(clients, client)
 	clients = append(clients, additional...)
 
-	// 按批次调用生产者
 	heap := heapHelper.GetHeap()
-	prodWg := sync.WaitGroup{}
-	for !heap.Empty() && w.ctx.Err() == nil {
-		selected := []int{}
-		count := 0
-		for count < w.userTweetRateLimit && w.ctx.Err() == nil {
-			if heap.Empty() {
-				break
-			}
+	logger.WithField("worker", "producer").Infof("initial heap size: %d", heap.Size())
 
-			entity := heap.Peek()
-			depth := heapHelper.GetDepth(entity)
-			if depth > w.userTweetRateLimit {
-				log.WithFields(log.Fields{
-					"user":  entity.Name(),
-					"depth": depth,
-				}).Warnln("user depth greater than the max limit of window")
-				heap.Pop()
-				continue
-			}
+	// Process users from heap sequentially
+	for !heap.Empty() && ctx.Err() == nil {
+		entity := heap.Peek()
+		heap.Pop()
 
-			if count+depth > w.userTweetRateLimit {
-				break
-			}
-
-			prodWg.Add(1)
-			producerPool.Submit(func() {
-				defer prodWg.Done()
-				w.fetchTweetOrFailbackToHeap(entity, heapHelper, db, clients, tweetChan)
-			})
-			selected = append(selected, depth)
-
-			count += depth
-			heap.Pop()
+		logger.WithField("user", entity.Name()).Infoln("processing user from heap")
+		currUnsentTweets := w.fetchTweetOrFallbackToHeap(ctx, cancel, entity, heapHelper, db, clients, output, incrementProduced)
+		if len(currUnsentTweets) > 0 {
+			logger.WithField("user", entity.Name()).Warnf("found %d unsent tweets for user, adding to unsent list", len(currUnsentTweets))
+			unsentTweets = append(unsentTweets, currUnsentTweets...)
 		}
-		log.Debugln(selected)
-		prodWg.Wait()
 	}
+
+	if ctx.Err() != nil {
+		return unsentTweets, ctx.Err()
+	}
+
+	logger.WithField("worker", "producer").Info("all producers finished successfully for SimpleWorker")
+	return unsentTweets, nil
 }
 
-func (w *worker) fetchTweetOrFailbackToHeap(
+func (w *worker) fetchTweetOrFallbackToHeap(
+	ctx context.Context,
+	cancel context.CancelCauseFunc,
 	entity *smartpathdto.UserSmartPath,
 	heapHelper HeapHelper,
 	db *sqlx.DB,
 	clients []*resty.Client,
-	tweetChan chan<- dldto.TweetDlMeta,
-) {
-	defer utils.PanicHandler(w.cancel)
-	logger := log.WithField("worker", "getting")
+	tweetDlMetaOutput chan<- dldto.TweetDlMeta,
+	incrementProduced func(),
+) []dldto.TweetDlMeta {
+	logger := log.WithField("function", "fetchTweetOrFailbackToHeapForSimpleWorker")
+	logger.WithField("user", entity.Name()).Infoln("fetching user tweets")
 
-	user := heapHelper.GetUserByTwitterId(entity.Uid())
+	defer utils.PanicHandler(cancel)
+
+	user := heapHelper.GetUserByTwitterId(entity.TwitterId())
 	heap := heapHelper.GetHeap()
-	if w.ctx.Err() != nil {
-		heap.Push(entity)
-		return
-	}
-	cli := twitter.SelectClientForMediaRequest(w.ctx, clients)
-	if cli == nil {
-		heap.Push(entity)
-		w.cancel(fmt.Errorf("no client available"))
-		return
+	safePushToHeap := func(reason string) {
+		logger.WithField("user", entity.Name()).Warnf("%s, pushing back to heap", reason)
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.WithField("user", entity.Name()).Errorf("panic while pushing to heap: %v", r)
+				}
+			}()
+			heap.Push(entity)
+		}()
 	}
 
-	tweets, err := user.GetMeidas(w.ctx, cli, &utils.TimeRange{Min: entity.LatestReleaseTime()})
+	if ctx.Err() != nil {
+		safePushToHeap("context cancelled")
+		return nil
+	}
+
+	logger.WithField("user", entity.Name()).Infof("latest release time: %s", entity.LatestReleaseTime())
+	cli := twitter.SelectClientForMediaRequest(ctx, clients)
+	if cli == nil {
+		safePushToHeap("no client available")
+		cancel(fmt.Errorf("no client available"))
+		return nil
+	}
+	tweets, err := user.GetMeidas(ctx, cli, utils.TimeRange{Begin: entity.LatestReleaseTime()})
 	if err == twitter.ErrWouldBlock {
-		heap.Push(entity)
-		return
+		safePushToHeap("client would block")
+		return nil
 	}
 	if v, ok := err.(*twitter.TwitterApiError); ok {
-		// 客户端不再可用
+		logger.WithField("user", entity.Name()).Warnf("twitter api error: %s", v.Error())
 		switch v.Code {
 		case twitter.ErrExceedPostLimit:
 			twitter.SetClientError(cli, fmt.Errorf("reached the limit for seeing posts today"))
-			heap.Push(entity)
-			return
+			safePushToHeap("exceed post limit")
+			return nil
 		case twitter.ErrAccountLocked:
 			twitter.SetClientError(cli, fmt.Errorf("account is locked"))
-			heap.Push(entity)
-			return
+			safePushToHeap("account locked")
+			return nil
 		}
 	}
-	if w.ctx.Err() != nil {
-		heap.Push(entity)
-		return
+
+	if ctx.Err() != nil {
+		safePushToHeap("context cancelled while getting user medias")
+		return nil
 	}
+
 	if err != nil {
 		logger.WithField("user", entity.Name()).Warnln("failed to get user medias:", err)
-		return
+		return nil
 	}
 
 	if len(tweets) == 0 {
+		logger.WithField("user", entity.Name()).Infoln("no tweets found, updating user medias count")
 		if err := database.UpdateUserEntityMediCount(db, entity.Id(), user.MediaCount); err != nil {
 			logger.WithField("user", entity.Name()).Panicln("failed to update user medias count:", err)
 		}
-		return
+		return nil
 	}
+	logger.WithFields(log.Fields{
+		"user":     entity.Name(),
+		"tweetNum": len(tweets),
+	}).Infoln("found tweets, preparing to push to tweet channel")
 
-	// 确保该用户所有推文已推送并更新用户推文状态
-	for _, tw := range tweets {
-		pt := dldto.InEntity{Tweet: tw, Entity: entity}
+	currIdx := 0
+tweetLoop:
+	for currIdx = range tweets {
+		tweetDlMeta := dldto.InEntity{Tweet: tweets[currIdx], Entity: entity}
+
+		timeoutTimer := time.NewTimer(w.pushTimeout)
 		select {
-		case tweetChan <- &pt:
-			atomic.AddInt32(&w.genCount, 1)
-		case <-w.ctx.Done():
-			return // 防止无消费者导致死锁
+		case tweetDlMetaOutput <- &tweetDlMeta:
+			timeoutTimer.Stop()
+			incrementProduced()
+			logger.WithField("user", entity.Name()).Debugf("pushed tweet %d to tweet channel", tweets[currIdx].Id)
+		case <-ctx.Done():
+			timeoutTimer.Stop()
+			logger.WithField("user", entity.Name()).Warnln("context cancelled while pushing tweet to channel")
+			break tweetLoop
+		case <-timeoutTimer.C:
+			logger.WithField("user", entity.Name()).Warnln("timeout while pushing tweet to channel")
+			break tweetLoop
 		}
 	}
 
+	var tweetsToUpdate []dldto.TweetDlMeta
+	for i := currIdx; i < len(tweets); i++ {
+		tweetsToUpdate = append(tweetsToUpdate, dldto.InEntity{Tweet: tweets[i], Entity: entity})
+	}
+
+	logger.WithField("user", entity.Name()).Infoln("updating user medias count in database")
 	if err := database.UpdateUserEntityTweetStat(db, entity.Id(), tweets[0].CreatedAt, user.MediaCount); err != nil {
-		// 影响程序的正确性，必须 Panic
 		logger.WithField("user", entity.Name()).Panicln("failed to update user tweets stat:", err)
 	}
+
+	return tweetsToUpdate
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// tweetDownloader handles downloading of tweets from a channel
-// 负责下载推文，保证 tweet chan 内的推文要么下载成功，要么推送至 error chan
-func (w *worker) DownloadTweetMediaFromTweetChan(client *resty.Client, errChan chan<- dldto.TweetDlMeta, tweetChan <-chan dldto.TweetDlMeta) {
-	var pt dldto.TweetDlMeta
-	var ok bool
+// DownloadTweetMediaFromTweetChan handles downloading of tweets from a channel
+// Returns a slice of tweets that failed to download or were not processed
+func (w *worker) DownloadTweetMediaFromTweetChan(
+	ctx context.Context,
+	cancel context.CancelCauseFunc,
+	client *resty.Client,
+	tweetDlMetaIn <-chan dldto.TweetDlMeta,
+	incrementConsumed func(),
+) []dldto.TweetDlMeta {
+	logger := log.WithField("function", "DownloadTweetMediaFromTweetChan")
 
-	defer w.checkCond.Signal()
+	var failedTweets []dldto.TweetDlMeta
+
 	defer func() {
 		if p := recover(); p != nil {
-			w.cancel(fmt.Errorf("%v", p)) // panic 取消上下文，防止生产者死锁
-			log.WithField("worker", "downloading").Errorln("panic:", p)
+			logger.Errorf("consumer panic: %v", p)
+			cancel(fmt.Errorf("consumer panic: %v", p))
 
-			dlCount := 0
-			if pt != nil {
-				errChan <- pt // push 正下载的推文
-				dlCount += 1
+			// TODO: not process failedTweets at here
+			// Drain remaining tweets and add them to failed list
+			drainedCount := 0
+			for pt := range tweetDlMetaIn {
+				incrementConsumed()
+				drainedCount++
+				failedTweets = append(failedTweets, pt)
+				logger.WithField("tweet", pt.GetTweet().Id).Debug("added panic-drained tweet to failed list")
 			}
-			// 确保只有1个协程的情况下，未能下载完毕的推文仍然会全部推送到 errch
-			for pt := range tweetChan {
-				errChan <- pt
-				dlCount += 1
-			}
-
-			atomic.AddInt32(&w.dlCount, int32(dlCount))
+			logger.WithField("drainedCount", drainedCount).Debug("finished draining tweets due to panic")
 		}
-		close(errChan)
 	}()
 
 	for {
 		select {
-		case pt, ok = <-tweetChan:
+		case tweetDlMeta, ok := <-tweetDlMetaIn:
 			if !ok {
-				return
+				logger.Debug("tweet channel closed, consumer exiting")
+				return failedTweets
 			}
-		case <-w.ctx.Done():
-			dlCount := 0
-			for pt := range tweetChan {
-				errChan <- pt
-				dlCount += 1
+
+			logger.WithField("tweet", tweetDlMeta.GetTweet().Id).Debug("processing tweet")
+			err := w.mediaDownloadHelper.SafeDownload(ctx, client, tweetDlMeta)
+			incrementConsumed()
+
+			if err == nil {
+				logger.WithField("tweet", tweetDlMeta.GetTweet().Id).Debug("downloaded tweet successfully")
+				continue
 			}
-			atomic.AddInt32(&w.dlCount, int32(dlCount))
-			return
-		}
 
-		err := w.mediaDownloadHelper.SafeDownload(w.ctx, client, pt)
-		atomic.AddInt32(&w.dlCount, 1)
-		if err == nil {
-			continue
-		}
+			logger.WithField("tweet", tweetDlMeta.GetTweet().Id).Errorf("failed to download tweet: %v", err)
+			failedTweets = append(failedTweets, tweetDlMeta)
 
-		errChan <- pt
-		// cancel context and exit if no disk space
-		if errors.Is(err, syscall.ENOSPC) {
-			w.cancel(err)
+			// Cancel context and exit if critical errors occur
+			if errors.Is(err, syscall.ENOSPC) {
+				logger.Error("no disk space, cancelling context")
+				cancel(err)
+			}
+
+		case <-ctx.Done():
+			// TODO: not process failedTweets at here
+			drainedCount := 0
+			for pt := range tweetDlMetaIn {
+				incrementConsumed()
+				drainedCount++
+				failedTweets = append(failedTweets, pt)
+				logger.WithField("tweet", pt.GetTweet().Id).Debug("added drained tweet to failed list")
+			}
+			logger.WithField("drainedCount", drainedCount).Debug("finished draining tweets due to context cancellation")
+			return failedTweets
 		}
 	}
 }

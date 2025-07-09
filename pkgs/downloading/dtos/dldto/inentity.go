@@ -22,3 +22,7 @@ func (pt InEntity) GetPath() string {
 	}
 	return path
 }
+
+func (pt InEntity) GetUserSmartPath() smartpathdto.SmartPath {
+	return pt.Entity
+}

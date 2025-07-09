@@ -11,26 +11,26 @@ import (
 )
 
 type UserSmartPath struct {
-	Record  *database.UserEntity
-	db      *sqlx.DB
-	Created bool
+	Record     *database.UserEntity
+	db         *sqlx.DB
+	isSyncToDb bool
 }
 
-func NewUserSmartPath(db *sqlx.DB, uid uint64, parentDir string) (*UserSmartPath, error) {
+func NewUserSmartPath(db *sqlx.DB, twitterId uint64, parentDir string) (*UserSmartPath, error) {
 	created := true
-	userEntity, err := database.GetUserEntity(db, uid, parentDir)
+	userEntity, err := database.GetUserEntity(db, twitterId, parentDir)
 	if err != nil {
 		return nil, err
 	}
 
 	if userEntity == nil {
 		userEntity = &database.UserEntity{}
-		userEntity.Uid = uid
+		userEntity.Uid = twitterId
 		userEntity.ParentDir = parentDir
 		created = false
 	}
 
-	return &UserSmartPath{Record: userEntity, db: db, Created: created}, nil
+	return &UserSmartPath{Record: userEntity, db: db, isSyncToDb: created}, nil
 }
 
 func RebuildUserSmartPath(db *sqlx.DB, record *database.UserEntity) (*UserSmartPath, error) {
@@ -42,9 +42,9 @@ func RebuildUserSmartPath(db *sqlx.DB, record *database.UserEntity) (*UserSmartP
 	}
 
 	return &UserSmartPath{
-		Record:  record,
-		db:      db,
-		Created: true,
+		Record:     record,
+		db:         db,
+		isSyncToDb: true,
 	}, nil
 }
 
@@ -58,7 +58,7 @@ func (user *UserSmartPath) Create(name string) error {
 	if err := database.CreateUserEntity(user.db, user.Record); err != nil {
 		return err
 	}
-	user.Created = true
+	user.isSyncToDb = true
 	return nil
 }
 
@@ -71,12 +71,12 @@ func (user *UserSmartPath) Remove() error {
 	if err := database.DelUserEntity(user.db, uint32(user.Record.Id.Int32)); err != nil {
 		return err
 	}
-	user.Created = false
+	user.isSyncToDb = false
 	return nil
 }
 
 func (user *UserSmartPath) Rename(title string) error {
-	if !user.Created {
+	if !user.isSyncToDb {
 		return fmt.Errorf("user entity [%s:%d] was not created", user.Record.ParentDir, user.Record.Uid)
 	}
 
@@ -107,21 +107,21 @@ func (user *UserSmartPath) Name() string {
 }
 
 func (user *UserSmartPath) Id() int {
-	if !user.Created {
+	if !user.isSyncToDb {
 		panic(fmt.Sprintf("user entity [%s:%d] was not created", user.Record.ParentDir, user.Record.Uid))
 	}
 	return int(user.Record.Id.Int32)
 }
 
 func (user *UserSmartPath) LatestReleaseTime() time.Time {
-	if !user.Created {
+	if !user.isSyncToDb {
 		panic(fmt.Sprintf("user entity [%s:%d] was not created", user.Record.ParentDir, user.Record.Uid))
 	}
 	return user.Record.LatestReleaseTime.Time
 }
 
 func (user *UserSmartPath) SetLatestReleaseTime(t time.Time) error {
-	if !user.Created {
+	if !user.isSyncToDb {
 		return fmt.Errorf("user entity [%s:%d] was not created", user.Record.ParentDir, user.Record.Uid)
 	}
 	err := database.SetUserEntityLatestReleaseTime(user.db, int(user.Record.Id.Int32), t)
@@ -131,10 +131,10 @@ func (user *UserSmartPath) SetLatestReleaseTime(t time.Time) error {
 	return err
 }
 
-func (user *UserSmartPath) Uid() uint64 {
+func (user *UserSmartPath) TwitterId() uint64 {
 	return user.Record.Uid
 }
 
-func (user *UserSmartPath) Recorded() bool {
-	return user.Created
+func (user *UserSmartPath) IsSyncToDb() bool {
+	return user.isSyncToDb
 }

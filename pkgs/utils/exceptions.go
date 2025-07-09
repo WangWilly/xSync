@@ -12,5 +12,6 @@ func PanicHandler(cancel context.CancelCauseFunc) {
 		buf := make([]byte, 1<<16)
 		n := runtime.Stack(buf, false)
 		fmt.Printf("Recovered from panic: %v\n%s\n", r, buf[:n])
+		return
 	}
 }
