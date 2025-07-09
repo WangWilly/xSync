@@ -114,3 +114,21 @@ func (td *TweetDumper) GetTotal(db *sqlx.DB) ([]*dldto.InEntity, error) {
 func (td *TweetDumper) Count() int {
 	return td.count
 }
+
+// GetTweetsByEntityId returns tweets for a specific entity ID
+func (td *TweetDumper) GetTweetsByEntityId(entityId int) []*twitter.Tweet {
+	tweets, exists := td.data[entityId]
+	if !exists {
+		return nil
+	}
+	return tweets
+}
+
+// GetAllEntities returns all entity IDs that have tweets
+func (td *TweetDumper) GetAllEntities() []int {
+	var entities []int
+	for entityId := range td.data {
+		entities = append(entities, entityId)
+	}
+	return entities
+}
