@@ -242,6 +242,7 @@ func (w *dbWorker) DownloadTweetMediaFromTweetChanWithDB(
 			logger.Errorf("consumer panic: %v", p)
 			cancel(fmt.Errorf("consumer panic: %v", p))
 
+			// TODO: not process failedTweets at here
 			// Drain remaining tweets and add them to failed list
 			drainedCount := 0
 			for pt := range tweetDlMetaIn {
@@ -281,6 +282,7 @@ func (w *dbWorker) DownloadTweetMediaFromTweetChanWithDB(
 			}
 
 		case <-ctx.Done():
+			// TODO: not process failedTweets at here
 			drainedCount := 0
 			for pt := range tweetDlMetaIn {
 				incrementConsumed()

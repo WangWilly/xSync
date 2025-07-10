@@ -292,7 +292,9 @@ func retryFailedTweets(ctx context.Context, dumper *downloading.TweetDumper, db 
 		toretry = append(toretry, leg)
 	}
 
-	newFails := downloading.BatchDownloadTweet(ctx, client, toretry...)
+	// TODO:
+	// newFails := downloading.BatchDownloadTweet(ctx, client, toretry...)
+	newFails := downloading.BatchDownloadTweetWithDB(ctx, client, db, toretry...)
 	dumper.Clear()
 	for _, pt := range newFails {
 		te := pt.(*dldto.InEntity)
