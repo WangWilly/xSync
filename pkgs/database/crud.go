@@ -70,6 +70,32 @@ CREATE TABLE IF NOT EXISTS user_links (
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_links_user_id ON user_links (user_id);
+
+CREATE TABLE IF NOT EXISTS tweets (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id INTEGER NOT NULL,
+	content TEXT NOT NULL,
+	tweet_time DATETIME NOT NULL,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(user_id) REFERENCES users (id)
+);
+
+CREATE TABLE IF NOT EXISTS medias (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id INTEGER NOT NULL,
+	tweet_id INTEGER NOT NULL,
+	location VARCHAR NOT NULL,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(user_id) REFERENCES users (id),
+	FOREIGN KEY(tweet_id) REFERENCES tweets (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tweets_user_id ON tweets (user_id);
+CREATE INDEX IF NOT EXISTS idx_medias_user_id ON medias (user_id);
+CREATE INDEX IF NOT EXISTS idx_medias_tweet_id ON medias (tweet_id);
+CREATE INDEX IF NOT EXISTS idx_tweets_tweet_time ON tweets (tweet_time);
 `
 
 func CreateTables(db *sqlx.DB) {
@@ -343,4 +369,160 @@ func UpdateUserLink(db *sqlx.DB, id int32, name string) error {
 	stmt := `UPDATE user_links SET name = ? WHERE id = ?`
 	_, err := db.Exec(stmt, name, id)
 	return err
+}
+
+// Tweet CRUD operations
+func CreateTweet(db *sqlx.DB, tweet *Tweet) error {
+	stmt := `INSERT INTO tweets(user_id, content, tweet_time, created_at, updated_at) 
+			 VALUES(:user_id, :content, :tweet_time, :created_at, :updated_at)`
+	res, err := db.NamedExec(stmt, tweet)
+	if err != nil {
+		return err
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
+
+	tweet.Id = id
+	return nil
+}
+
+func GetTweetById(db *sqlx.DB, id int64) (*Tweet, error) {
+	stmt := `SELECT * FROM tweets WHERE id=?`
+	result := &Tweet{}
+	err := db.Get(result, stmt, id)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return result, err
+}
+
+func GetTweetsByUserId(db *sqlx.DB, userId uint64) ([]*Tweet, error) {
+	stmt := `SELECT * FROM tweets WHERE user_id=? ORDER BY tweet_time DESC`
+	var tweets []*Tweet
+	err := db.Select(&tweets, stmt, userId)
+	return tweets, err
+}
+
+func UpdateTweet(db *sqlx.DB, tweet *Tweet) error {
+	tweet.UpdatedAt = time.Now()
+	stmt := `UPDATE tweets SET content=?, tweet_time=?, updated_at=? WHERE id=?`
+	_, err := db.Exec(stmt, tweet.Content, tweet.TweetTime, tweet.UpdatedAt, tweet.Id)
+	return err
+}
+
+func DeleteTweet(db *sqlx.DB, id int64) error {
+	stmt := `DELETE FROM tweets WHERE id=?`
+	_, err := db.Exec(stmt, id)
+	return err
+}
+
+// Media CRUD operations
+func CreateMedia(db *sqlx.DB, media *Media) error {
+	stmt := `INSERT INTO medias(user_id, tweet_id, location, created_at, updated_at) 
+			 VALUES(:user_id, :tweet_id, :location, :created_at, :updated_at)`
+	res, err := db.NamedExec(stmt, media)
+	if err != nil {
+		return err
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
+
+	media.Id = id
+	return nil
+}
+
+func GetMediaById(db *sqlx.DB, id int64) (*Media, error) {
+	stmt := `SELECT * FROM medias WHERE id=?`
+	result := &Media{}
+	err := db.Get(result, stmt, id)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return result, err
+}
+
+func GetMediasByUserId(db *sqlx.DB, userId uint64) ([]*Media, error) {
+	stmt := `SELECT * FROM medias WHERE user_id=? ORDER BY created_at DESC`
+	var medias []*Media
+	err := db.Select(&medias, stmt, userId)
+	return medias, err
+}
+
+func GetMediasByTweetId(db *sqlx.DB, tweetId int64) ([]*Media, error) {
+	stmt := `SELECT * FROM medias WHERE tweet_id=? ORDER BY created_at ASC`
+	var medias []*Media
+	err := db.Select(&medias, stmt, tweetId)
+	return medias, err
+}
+
+func GetMediaByLocation(db *sqlx.DB, location string) (*Media, error) {
+	stmt := `SELECT * FROM medias WHERE location=?`
+	result := &Media{}
+	err := db.Get(result, stmt, location)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return result, err
+}
+
+func UpdateMedia(db *sqlx.DB, media *Media) error {
+	media.UpdatedAt = time.Now()
+	stmt := `UPDATE medias SET tweet_id=?, location=?, updated_at=? WHERE id=?`
+	_, err := db.Exec(stmt, media.TweetId, media.Location, media.UpdatedAt, media.Id)
+	return err
+}
+
+func DeleteMedia(db *sqlx.DB, id int64) error {
+	stmt := `DELETE FROM medias WHERE id=?`
+	_, err := db.Exec(stmt, id)
+	return err
+}
+
+// Helper functions for tweet-media relationships
+func GetTweetsWithMedia(db *sqlx.DB, userId uint64) ([]map[string]interface{}, error) {
+	stmt := `SELECT t.*, m.location as media_location 
+			 FROM tweets t 
+			 LEFT JOIN medias m ON t.id = m.tweet_id 
+			 WHERE t.user_id=? 
+			 ORDER BY t.tweet_time DESC`
+
+	rows, err := db.Query(stmt, userId)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []map[string]interface{}
+	for rows.Next() {
+		var tweet Tweet
+		var mediaLocation sql.NullString
+
+		err := rows.Scan(&tweet.Id, &tweet.UserId, &tweet.Content,
+			&tweet.TweetTime, &tweet.CreatedAt, &tweet.UpdatedAt, &mediaLocation)
+		if err != nil {
+			return nil, err
+		}
+
+		result := map[string]interface{}{
+			"id":         tweet.Id,
+			"content":    tweet.Content,
+			"tweet_time": tweet.TweetTime,
+			"created_at": tweet.CreatedAt,
+			"updated_at": tweet.UpdatedAt,
+		}
+
+		if mediaLocation.Valid {
+			result["media_location"] = mediaLocation.String
+		}
+
+		results = append(results, result)
+	}
+
+	return results, nil
 }

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -43,6 +44,24 @@ type ListEntity struct {
 	LstId     int64         `db:"lst_id"`
 	Name      string        `db:"name"`
 	ParentDir string        `db:"parent_dir"`
+}
+
+type Tweet struct {
+	Id        int64     `db:"id"`
+	UserId    uint64    `db:"user_id"`
+	Content   string    `db:"content"`
+	TweetTime time.Time `db:"tweet_time"`
+	CreatedAt time.Time `db:"created_at"`
+	UpdatedAt time.Time `db:"updated_at"`
+}
+
+type Media struct {
+	Id        int64     `db:"id"`
+	UserId    uint64    `db:"user_id"`
+	TweetId   int64     `db:"tweet_id"`
+	Location  string    `db:"location"`
+	CreatedAt time.Time `db:"created_at"`
+	UpdatedAt time.Time `db:"updated_at"`
 }
 
 func (le *ListEntity) Path() string {

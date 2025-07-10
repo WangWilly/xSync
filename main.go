@@ -232,7 +232,7 @@ func main() {
 	if err != nil || len(usersWithinListEntity) == 0 {
 		log.Fatalln("failed to wrap users within list entity:", err)
 	}
-	toDump, err = downloading.BatchUserDownload(ctx, client, db, usersWithinListEntity, pathHelper.Users, autoFollow, addtionalClients)
+	toDump, err = downloading.BatchUserDownloadWithDB(ctx, client, db, usersWithinListEntity, pathHelper.Users, autoFollow, addtionalClients)
 	if err != nil {
 		log.Errorln("failed to download:", err)
 	}

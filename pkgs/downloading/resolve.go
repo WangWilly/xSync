@@ -118,3 +118,43 @@ func BatchDownloadTweet(ctx context.Context, client *resty.Client, tweetDlMetas 
 	}
 	return nil
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+// BatchUserDownloadWithDB downloads multiple users with database integration for tweets and media
+func BatchUserDownloadWithDB(ctx context.Context, client *resty.Client, db *sqlx.DB, users []heaphelper.UserWithinListEntity, dir string, autoFollow bool, additional []*resty.Client) ([]dldto.TweetDlMeta, error) {
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+
+	logger := log.WithField("function", "BatchUserDownloadWithDB")
+	logger.Infoln("starting batch user download with database integration")
+
+	heapHelper := heaphelper.NewHelper(users)
+	heapHelper.MakeHeap(ctx, db, client, dir, autoFollow)
+	mediaDownloadHelper := mediadownloadhelper.NewHelper()
+	simpleWorker := workers.NewSimpleWorker[dldto.TweetDlMeta](ctx, cancel, MaxDownloadRoutine)
+	dbWorker := resolveworker.NewDBWorker(mediaDownloadHelper)
+
+	producer := func(ctx context.Context, cancel context.CancelCauseFunc, output chan<- dldto.TweetDlMeta) ([]dldto.TweetDlMeta, error) {
+		return dbWorker.ProduceFromHeapToTweetChanWithDB(ctx, cancel, heapHelper, db, client, additional, output, simpleWorker.IncrementProduced)
+	}
+	consumer := func(ctx context.Context, cancel context.CancelCauseFunc, input <-chan dldto.TweetDlMeta) []dldto.TweetDlMeta {
+		return dbWorker.DownloadTweetMediaFromTweetChanWithDB(ctx, cancel, client, db, input, simpleWorker.IncrementConsumed)
+	}
+
+	result := simpleWorker.Process(producer, consumer, MaxDownloadRoutine)
+	logger.WithFields(log.Fields{
+		"produced": result.Stats.Produced,
+		"consumed": result.Stats.Consumed,
+		"failed":   result.Stats.Failed,
+		"duration": result.Stats.Duration,
+	}).Info("finished downloading tweets with database integration")
+
+	if result.Error != nil {
+		logger.WithError(result.Error).Error("Producer error during tweet download with DB")
+		return result.Failed, result.Error
+	}
+	return result.Failed, context.Cause(ctx)
+}
+
+////////////////////////////////////////////////////////////////////////////////

@@ -107,10 +107,11 @@ func NewServer(dbPath, port string) (*Server, error) {
 			return time.Since(t).Round(time.Minute).String() + " ago"
 		},
 	}).ParseGlob("templates/*.html")
+	fmt.Println(templates.DefinedTemplates())
 
 	if err != nil {
 		// If templates don't exist, create inline templates
-		templates = template.Must(template.New("dashboard").Funcs(template.FuncMap{
+		templates = template.Must(template.New("dashboard.html").Funcs(template.FuncMap{
 			"formatTime": func(t time.Time) string {
 				if t.IsZero() {
 					return "Never"
@@ -144,7 +145,10 @@ func (s *Server) Start() error {
 	http.HandleFunc("/", s.handleDashboard)
 	http.HandleFunc("/user/", s.handleUser)
 	http.HandleFunc("/tweets/", s.handleTweets)
+	http.HandleFunc("/media/", s.handleMedia)
 	http.HandleFunc("/api/stats", s.handleAPIStats)
+	http.HandleFunc("/api/tweets/", s.handleAPITweets)
+	http.HandleFunc("/api/media/", s.handleAPIMedia)
 	http.HandleFunc("/static/", s.handleStatic)
 
 	return http.ListenAndServe(":"+s.port, nil)
@@ -158,7 +162,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	if err := s.templates.ExecuteTemplate(w, "dashboard", data); err != nil {
+	if err := s.templates.ExecuteTemplate(w, "dashboard.html", data); err != nil {
 		http.Error(w, "Failed to render template: "+err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -259,6 +263,46 @@ func (s *Server) handleTweets(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(data)
 }
 
+func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
+	userID := r.URL.Path[len("/media/"):]
+	if userID == "" {
+		http.Error(w, "User ID required", http.StatusBadRequest)
+		return
+	}
+
+	id, err := strconv.ParseUint(userID, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	// Get media from database
+	medias, err := database.GetMediasByUserId(s.db, id)
+	if err != nil {
+		http.Error(w, "Failed to get media: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	user, err := database.GetUserById(s.db, id)
+	if err != nil {
+		http.Error(w, "Failed to get user: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	userName := "Unknown"
+	if user != nil {
+		userName = user.ScreenName
+	}
+
+	data := map[string]interface{}{
+		"user_name": userName,
+		"medias":    medias,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(data)
+}
+
 func (s *Server) handleAPIStats(w http.ResponseWriter, r *http.Request) {
 	data, err := s.getDashboardData()
 	if err != nil {
@@ -268,6 +312,54 @@ func (s *Server) handleAPIStats(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)
+}
+
+func (s *Server) handleAPITweets(w http.ResponseWriter, r *http.Request) {
+	userID := r.URL.Path[len("/api/tweets/"):]
+	if userID == "" {
+		http.Error(w, "User ID required", http.StatusBadRequest)
+		return
+	}
+
+	id, err := strconv.ParseUint(userID, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	// Get tweets with media from database
+	tweetsWithMedia, err := database.GetTweetsWithMedia(s.db, id)
+	if err != nil {
+		http.Error(w, "Failed to get tweets: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(tweetsWithMedia)
+}
+
+func (s *Server) handleAPIMedia(w http.ResponseWriter, r *http.Request) {
+	userID := r.URL.Path[len("/api/media/"):]
+	if userID == "" {
+		http.Error(w, "User ID required", http.StatusBadRequest)
+		return
+	}
+
+	id, err := strconv.ParseUint(userID, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	// Get media from database
+	medias, err := database.GetMediasByUserId(s.db, id)
+	if err != nil {
+		http.Error(w, "Failed to get media: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(medias)
 }
 
 func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
@@ -285,6 +377,20 @@ func (s *Server) getDashboardData() (*DashboardData, error) {
 	totalTweets := s.dumper.Count()
 	totalMedias := 0
 
+	// Get database counts
+	var dbTotalTweets int
+	var dbTotalMedias int
+	s.db.Get(&dbTotalTweets, "SELECT COUNT(*) FROM tweets")
+	s.db.Get(&dbTotalMedias, "SELECT COUNT(*) FROM medias")
+
+	// Use database counts if available, otherwise fallback to dumper
+	if dbTotalTweets > 0 {
+		totalTweets = dbTotalTweets
+	}
+	if dbTotalMedias > 0 {
+		totalMedias = dbTotalMedias
+	}
+
 	for _, user := range users {
 		entities, err := s.getUserEntities(user.Id)
 		if err != nil {
@@ -296,12 +402,15 @@ func (s *Server) getDashboardData() (*DashboardData, error) {
 			Entities: entities,
 		}
 
+		// Get user-specific counts from database
+		var userTweets int
+		var userMedias int
+		s.db.Get(&userTweets, "SELECT COUNT(*) FROM tweets WHERE user_id = ?", user.Id)
+		s.db.Get(&userMedias, "SELECT COUNT(*) FROM medias WHERE user_id = ?", user.Id)
+
+		stats.TotalMedias = userMedias
+
 		for _, entity := range entities {
-			if entity.MediaCount.Valid {
-				count := int(entity.MediaCount.Int32)
-				stats.TotalMedias += count
-				totalMedias += count
-			}
 			if entity.LatestReleaseTime.Valid && entity.LatestReleaseTime.Time.After(stats.LatestActivity) {
 				stats.LatestActivity = entity.LatestReleaseTime.Time
 			}
@@ -322,14 +431,6 @@ func (s *Server) getDashboardData() (*DashboardData, error) {
 func (s *Server) getAllUsers() ([]*database.User, error) {
 	var users []*database.User
 	err := s.db.Select(&users, "SELECT * FROM users ORDER BY screen_name")
-
-	// TODO:
-	fmt.Println("Total users found:", len(users))
-	for _, user := range users {
-		// Load user entities for each user
-		fmt.Printf("User: %s (%d)\n", user.ScreenName, user.Id)
-	}
-	//
 	return users, err
 }
 
