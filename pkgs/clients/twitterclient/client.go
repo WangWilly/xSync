@@ -58,6 +58,13 @@ func NewWithConfig(config func(*resty.Client)) *Client {
 // Client State Management
 ////////////////////////////////////////////////////////////////////////////////
 
+// GetRestyClient returns the underlying resty client
+func (c *Client) GetRestyClient() *resty.Client {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	return c.restyClient
+}
+
 // GetError returns any error associated with the client
 func (c *Client) GetError() error {
 	c.mutex.RLock()

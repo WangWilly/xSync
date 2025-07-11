@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/WangWilly/xSync/pkgs/utils"
+	"github.com/go-resty/resty/v2"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -156,6 +157,20 @@ func (m *Manager) SelectClientForMediaRequest(ctx context.Context) *Client {
 // SelectClientForUserRequest selects a client suitable for user information requests
 func (m *Manager) SelectClientForUserRequest(ctx context.Context) *Client {
 	return m.SelectClient(ctx, "/i/api/graphql/xmU6X_CKVnQ5lSrCbAmJsg/UserByScreenName")
+}
+
+// GetAvailableRestyClients returns the underlying resty clients for all available clients
+func (m *Manager) GetAvailableRestyClients() []*resty.Client {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	var clients []*resty.Client
+	for _, client := range m.clients {
+		if client.IsAvailable() {
+			clients = append(clients, client.GetRestyClient())
+		}
+	}
+	return clients
 }
 
 // GetClientCount returns the number of clients in the manager
