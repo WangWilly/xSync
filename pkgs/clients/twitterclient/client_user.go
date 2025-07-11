@@ -36,6 +36,10 @@ type User struct {
 	Blocking     bool        // Whether this user is blocked
 }
 
+func (u *User) IsVisiable() bool {
+	return u.Followstate == FS_FOLLOWING || !u.IsProtected
+}
+
 // Tweet represents a Twitter tweet with its metadata and content
 type Tweet struct {
 	Id        uint64    // Unique identifier for the tweet

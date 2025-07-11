@@ -7,20 +7,21 @@ import (
 	"sync"
 	"time"
 
+	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
-	"github.com/WangWilly/xSync/pkgs/twitter"
 	"github.com/WangWilly/xSync/pkgs/utils"
-	"github.com/go-resty/resty/v2"
 	"github.com/jmoiron/sqlx"
 
 	log "github.com/sirupsen/logrus"
 )
 
 type helper struct {
-	uidToUserMap         map[uint64]*twitter.User
+	uidToUserMap         map[uint64]*twitterclient.User
 	users                []UserWithinListEntity
 	userSmartPathToDepth map[*smartpathdto.UserSmartPath]int
+
+	twitterClientManager *twitterclient.Manager
 
 	syncedUserSmartPaths sync.Map // map[uint64]*smartpathdto.UserSmartPath
 	syncedListUsers      sync.Map // map[int]*sync.Map, where int is ListEntityId, and *sync.Map is map[uint64]struct{}
@@ -30,8 +31,8 @@ type helper struct {
 	mtx sync.Mutex
 }
 
-func NewHelper(users []UserWithinListEntity) *helper {
-	uidToUserMap := make(map[uint64]*twitter.User)
+func NewHelper(users []UserWithinListEntity, twitterClientManager *twitterclient.Manager) *helper {
+	uidToUserMap := make(map[uint64]*twitterclient.User)
 	for _, u := range users {
 		uidToUserMap[u.User.TwitterId] = u.User
 	}
@@ -41,6 +42,8 @@ func NewHelper(users []UserWithinListEntity) *helper {
 		users:                users,
 		userSmartPathToDepth: make(map[*smartpathdto.UserSmartPath]int),
 
+		twitterClientManager: twitterClientManager,
+
 		syncedUserSmartPaths: sync.Map{},
 		syncedListUsers:      sync.Map{},
 
@@ -49,27 +52,11 @@ func NewHelper(users []UserWithinListEntity) *helper {
 	}
 }
 
-// Deprecated: Use NewHelper instead.
-func NewHelperDirect(
-	uidToUserMap map[uint64]*twitter.User,
-	userSmartPathToDepth map[*smartpathdto.UserSmartPath]int,
-	heap *utils.Heap[*smartpathdto.UserSmartPath],
-) *helper {
-	return &helper{
-		uidToUserMap:         uidToUserMap,
-		userSmartPathToDepth: userSmartPathToDepth,
-		syncedUserSmartPaths: sync.Map{},
-		syncedListUsers:      sync.Map{},
-		heap:                 heap,
-	}
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 func (h *helper) MakeHeap(
 	ctx context.Context,
 	db *sqlx.DB,
-	client *resty.Client,
 	dir string,
 	autoFollow bool,
 ) error {
@@ -77,7 +64,7 @@ func (h *helper) MakeHeap(
 	defer h.mtx.Unlock()
 
 	if h.heap != nil {
-		return errors.New("heap is already initialized, call MakeHeap only once")
+		return nil
 	}
 
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -89,6 +76,7 @@ func (h *helper) MakeHeap(
 	}()
 
 	tic := time.Now()
+	client := h.twitterClientManager.GetMasterClient()
 	debugDeepest := 0
 	debugMissingTweets := 0
 	userUserSmartPathRaw := make([]*smartpathdto.UserSmartPath, 0)
@@ -139,10 +127,10 @@ func (h *helper) MakeHeap(
 			}
 
 			// 自动关注
-			if user.IsProtected && user.Followstate == twitter.FS_UNFOLLOW && autoFollow {
+			if user.IsProtected && user.Followstate == twitterclient.FS_UNFOLLOW && autoFollow {
 				logger.WithField("user", user.Title()).Infoln("user is protected and not followed, trying to follow")
 
-				if err := twitter.FollowUser(ctx, client, user); err != nil {
+				if err := client.FollowUser(ctx, user.TwitterId); err != nil {
 					logger.WithField("user", user.Title()).Warnln("failed to follow user:", err)
 				} else {
 					logger.WithField("user", user.Title()).Debugln("follow request has been sent")
@@ -194,8 +182,8 @@ func (h *helper) MakeHeap(
 
 	lessFunc := func(lhs, rhs *smartpathdto.UserSmartPath) bool {
 		luser, ruser := h.uidToUserMap[lhs.TwitterId()], h.uidToUserMap[rhs.TwitterId()]
-		lOnlyMater := luser.IsProtected && luser.Followstate == twitter.FS_FOLLOWING
-		rOnlyMaster := ruser.IsProtected && ruser.Followstate == twitter.FS_FOLLOWING
+		lOnlyMater := luser.IsProtected && luser.Followstate == twitterclient.FS_FOLLOWING
+		rOnlyMaster := ruser.IsProtected && ruser.Followstate == twitterclient.FS_FOLLOWING
 
 		if lOnlyMater == rOnlyMaster {
 			return h.userSmartPathToDepth[lhs] > h.userSmartPathToDepth[rhs]
@@ -237,7 +225,7 @@ func (h *helper) GetDepth(userSmartPath *smartpathdto.UserSmartPath) int {
 	return 0
 }
 
-func (h *helper) GetUserByTwitterId(twitterId uint64) *twitter.User {
+func (h *helper) GetUserByTwitterId(twitterId uint64) *twitterclient.User {
 	h.mtx.Lock()
 	defer h.mtx.Unlock()
 

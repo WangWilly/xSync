@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
 	"github.com/WangWilly/xSync/pkgs/twitter"
@@ -13,11 +14,11 @@ import (
 
 // TODO: make private
 // IsIngoreUser checks if a user should be ignored during processing
-func IsIngoreUser(user *twitter.User) bool {
+func IsIngoreUser(user *twitterclient.User) bool {
 	return user.Blocking || user.Muting
 }
 
-func SyncUserToDbAndGetSmartPath(db *sqlx.DB, user *twitter.User, dir string) (*smartpathdto.UserSmartPath, error) {
+func SyncUserToDbAndGetSmartPath(db *sqlx.DB, user *twitterclient.User, dir string) (*smartpathdto.UserSmartPath, error) {
 	if err := syncTwitterUserToDb(db, user); err != nil {
 		return nil, err
 	}
@@ -35,7 +36,7 @@ func SyncUserToDbAndGetSmartPath(db *sqlx.DB, user *twitter.User, dir string) (*
 
 // syncTwitterUserToDb updates the database record for a user
 // 更新数据库中对用户的记录
-func syncTwitterUserToDb(db *sqlx.DB, twitterUser *twitter.User) error {
+func syncTwitterUserToDb(db *sqlx.DB, twitterUser *twitterclient.User) error {
 	renamed := false
 	isNew := false
 	userRecord, err := database.GetUserById(db, twitterUser.TwitterId)

@@ -9,10 +9,10 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"sync"
 	"syscall"
 
 	"github.com/WangWilly/xSync/pkgs/cli"
+	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/config"
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading"
@@ -113,9 +113,6 @@ func main() {
 		return
 	}
 	log.Infoln("config is loaded")
-	if conf.MaxDownloadRoutine > 0 {
-		downloading.MaxDownloadRoutine = conf.MaxDownloadRoutine
-	}
 
 	////////////////////////////////////////////////////////////////////////////
 	// Storage Path Setup
@@ -128,35 +125,46 @@ func main() {
 	////////////////////////////////////////////////////////////////////////////
 	// Twitter Authentication
 	////////////////////////////////////////////////////////////////////////////
-	client, screenName, err := twitter.Login(ctx, conf.Cookie.AuthToken, conf.Cookie.Ct0)
+	client := twitterclient.New()
+	client.SetTwitterIdenty(ctx, conf.Cookie.AuthToken, conf.Cookie.Ct0)
+	client.SetRateLimit()
+	screenName, err := client.GetScreenName(ctx)
 	if err != nil {
 		log.Fatalln("failed to login:", err)
 	}
-	twitter.EnableRateLimit(client)
-	if isDebug {
-		twitter.EnableRequestCounting(client)
-	}
 	log.Infoln("signed in as:", color.FgLightBlue.Render(screenName))
 
-	////////////////////////////////////////////////////////////////////////////
-	// Additional Cookies Loading
-	////////////////////////////////////////////////////////////////////////////
 	cookies, err := config.ReadAdditionalCookies(additionalCookiesPath)
 	if err != nil {
 		log.Warnln("failed to load additional cookies:", err)
 	}
 	log.Debugln("loaded additional cookies:", len(cookies))
-	addtionalClients := batchLogin(ctx, isDebug, cookies, screenName)
+	addtionalClients := cli.BatchLogin(ctx, cookies)
 
-	// set clients logger
+	// set logger to clients
 	clientLogFile, err := os.OpenFile(cliLogPath, os.O_TRUNC|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		log.Fatalln("failed to create log file:", err)
 	}
 	defer clientLogFile.Close()
-	setClientLogger(client, clientLogFile)
+
+	setClientLogger(client.GetRestyClient(), clientLogFile)
 	for _, client := range addtionalClients {
-		setClientLogger(client, clientLogFile)
+		setClientLogger(client.GetRestyClient(), clientLogFile)
+	}
+
+	////////////////////////////////////////////////////////////////////////////
+	// Twitter Client Manager Setup
+	////////////////////////////////////////////////////////////////////////////
+	manager := twitterclient.NewManager()
+	manager.SetMasterClient(client)
+	if err := manager.AddClient(client); err != nil {
+		log.Warnln("failed to add master client to manager:", err)
+	}
+	for _, additionalClient := range addtionalClients {
+		if err := manager.AddClient(additionalClient); err != nil {
+			log.Warnln("failed to add additional client to manager:", err)
+		}
 	}
 
 	////////////////////////////////////////////////////////////////////////////
@@ -171,7 +179,7 @@ func main() {
 	////////////////////////////////////////////////////////////////////////////
 	// Task Collection
 	////////////////////////////////////////////////////////////////////////////
-	task, err := tasks.MakeTask(ctx, client, usrArgs, listArgs, follArgs)
+	task, err := tasks.MakeTask(ctx, client.GetRestyClient(), usrArgs, listArgs, follArgs)
 	if err != nil {
 		log.Fatalln("failed to parse cmd args:", err)
 	}
@@ -202,21 +210,10 @@ func main() {
 	////////////////////////////////////////////////////////////////////////////
 	// Failed Tweets Dumping and Retry (Deferred)
 	////////////////////////////////////////////////////////////////////////////
-	var toDump = make([]dldto.TweetDlMeta, 0)
+	var toDump = make([]*dldto.NewEntity, 0)
 	defer func() {
 		dumper.Dump(pathHelper.ErrorJ)
 		log.Infof("%d tweets have been dumped and will be downloaded the next time the program runs", dumper.Count())
-	}()
-
-	// retry failed tweets at exit
-	defer func() {
-		for _, te := range toDump {
-			dumper.Push(te.GetUserSmartPath().Id(), te.GetTweet())
-		}
-		// 如果手动取消，不尝试重试，快速终止进程
-		if ctx.Err() != context.Canceled && !noRetry {
-			retryFailedTweets(ctx, dumper, db, client)
-		}
 	}()
 
 	////////////////////////////////////////////////////////////////////////////
@@ -228,11 +225,30 @@ func main() {
 	log.Infoln("start working for...")
 	tasks.PrintTask(task)
 
-	usersWithinListEntity, err := heaphelper.WrapToUsersWithinListEntity(ctx, client, db, task, pathHelper.Root)
+	usersWithinListEntity, err := heaphelper.WrapToUsersWithinListEntity(ctx, client.GetRestyClient(), db, task, pathHelper.Root)
 	if err != nil || len(usersWithinListEntity) == 0 {
 		log.Fatalln("failed to wrap users within list entity:", err)
 	}
-	toDump, err = downloading.BatchUserDownloadWithDB(ctx, client, db, usersWithinListEntity, pathHelper.Users, autoFollow, addtionalClients)
+	heapHelperInstance := heaphelper.NewHelper(usersWithinListEntity, manager)
+
+	downloadHelper := downloading.NewDownloadHelperWithConfig(downloading.Config{
+		MaxDownloadRoutine: conf.MaxDownloadRoutine,
+		DownloadDir:        pathHelper.Users,
+		AutoFollow:         autoFollow,
+	}, manager, heapHelperInstance)
+
+	// retry failed tweets at exit
+	defer func() {
+		for _, te := range toDump {
+			dumper.Push(te.GetUserSmartPath().Id(), te.GetTweet())
+		}
+		// 如果手动取消，不尝试重试，快速终止进程
+		if ctx.Err() != context.Canceled && !noRetry {
+			retryFailedTweets(ctx, dumper, db, downloadHelper)
+		}
+	}()
+
+	toDump, err = downloadHelper.BatchUserDownloadWithDB(ctx, db, usersWithinListEntity)
 	if err != nil {
 		log.Errorln("failed to download:", err)
 	}
@@ -276,7 +292,11 @@ func connectDatabase(path string) (*sqlx.DB, error) {
 // Retry Failed Tweets Function
 ////////////////////////////////////////////////////////////////////////////////
 
-func retryFailedTweets(ctx context.Context, dumper *downloading.TweetDumper, db *sqlx.DB, client *resty.Client) error {
+type DownloadHelper interface {
+	BatchDownloadTweetWithDB(ctx context.Context, db *sqlx.DB, tweetDlMetas ...*dldto.NewEntity) []*dldto.NewEntity
+}
+
+func retryFailedTweets(ctx context.Context, dumper *downloading.TweetDumper, db *sqlx.DB, downloadHelper DownloadHelper) error {
 	if dumper.Count() == 0 {
 		return nil
 	}
@@ -287,68 +307,15 @@ func retryFailedTweets(ctx context.Context, dumper *downloading.TweetDumper, db 
 		return err
 	}
 
-	toretry := make([]dldto.TweetDlMeta, 0, len(legacy))
-	for _, leg := range legacy {
-		toretry = append(toretry, leg)
-	}
+	toretry := make([]*dldto.NewEntity, 0, len(legacy))
+	toretry = append(toretry, legacy...)
 
-	// TODO:
-	// newFails := downloading.BatchDownloadTweet(ctx, client, toretry...)
-	newFails := downloading.BatchDownloadTweetWithDB(ctx, client, db, toretry...)
+	newFails := downloadHelper.BatchDownloadTweetWithDB(ctx, db, toretry...)
 	dumper.Clear()
 	for _, pt := range newFails {
-		te := pt.(*dldto.InEntity)
+		te := pt
 		dumper.Push(te.Entity.Id(), te.Tweet)
 	}
 
 	return nil
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Batch Login Function
-////////////////////////////////////////////////////////////////////////////////
-
-func batchLogin(ctx context.Context, dbg bool, cookies []*config.Cookie, master string) []*resty.Client {
-	if len(cookies) == 0 {
-		return nil
-	}
-
-	added := sync.Map{}
-	msgs := make([]string, len(cookies))
-	clients := []*resty.Client{}
-	wg := sync.WaitGroup{}
-	mtx := sync.Mutex{}
-	added.Store(master, struct{}{})
-
-	for i, cookie := range cookies {
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
-			cli, sn, err := twitter.Login(ctx, cookie.AuthToken, cookie.Ct0)
-			if _, loaded := added.LoadOrStore(sn, struct{}{}); loaded {
-				msgs[index] = "    - ? repeated\n"
-				return
-			}
-
-			if err != nil {
-				msgs[index] = fmt.Sprintf("    - ? %v\n", err)
-				return
-			}
-			twitter.EnableRateLimit(cli)
-			if dbg {
-				twitter.EnableRequestCounting(cli)
-			}
-			mtx.Lock()
-			defer mtx.Unlock()
-			clients = append(clients, cli)
-			msgs[index] = fmt.Sprintf("    - %s\n", sn)
-		}(i)
-	}
-
-	wg.Wait()
-	log.Infoln("loaded additional accounts:", len(clients))
-	for _, msg := range msgs {
-		fmt.Print(msg)
-	}
-	return clients
 }

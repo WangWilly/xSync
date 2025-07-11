@@ -9,10 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
-	"github.com/WangWilly/xSync/pkgs/twitter"
 	"github.com/WangWilly/xSync/pkgs/utils"
-	"github.com/go-resty/resty/v2"
 	"github.com/gookit/color"
 )
 
@@ -26,7 +25,7 @@ func NewHelper() *helper {
 	}
 }
 
-func (h *helper) SafeDownload(ctx context.Context, client *resty.Client, meta dldto.TweetDlMeta) error {
+func (h *helper) SafeDownload(ctx context.Context, client *twitterclient.Client, meta *dldto.NewEntity) error {
 	path := meta.GetPath()
 	if path == "" {
 		return errors.New("path is empty")
@@ -45,7 +44,7 @@ func (h *helper) SafeDownload(ctx context.Context, client *resty.Client, meta dl
 // download downloads all media files for a given tweet
 // 任何一个 url 下载失败直接返回
 // TODO: 要么全做，要么不做
-func (h *helper) download(ctx context.Context, client *resty.Client, dir string, tweet *twitter.Tweet) error {
+func (h *helper) download(ctx context.Context, client *twitterclient.Client, dir string, tweet *twitterclient.Tweet) error {
 	text := utils.ToLegalWindowsFileName(tweet.Text)
 
 	for _, u := range tweet.Urls {
@@ -55,7 +54,7 @@ func (h *helper) download(ctx context.Context, client *resty.Client, dir string,
 		}
 
 		// 请求
-		resp, err := client.R().SetContext(ctx).SetQueryParam("name", "4096x4096").Get(u)
+		resp, err := client.GetRestyClient().R().SetContext(ctx).SetQueryParam("name", "4096x4096").Get(u)
 		if err != nil {
 			return err
 		}

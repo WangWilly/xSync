@@ -5,6 +5,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
 	"github.com/WangWilly/xSync/pkgs/tasks"
@@ -17,7 +18,7 @@ import (
 
 // UserWithinListEntity represents a user within a list entity context
 type UserWithinListEntity struct {
-	User *twitter.User
+	User *twitterclient.User
 	Leid *int
 }
 
@@ -107,7 +108,16 @@ func WrapToUsersWithinListEntity(
 	}
 
 	for _, interestedTwitterUser := range task.Users {
-		userList = append(userList, UserWithinListEntity{User: interestedTwitterUser, Leid: nil})
+		userList = append(userList, UserWithinListEntity{User: &twitterclient.User{
+			TwitterId:   interestedTwitterUser.TwitterId,
+			Name:        interestedTwitterUser.Name,
+			ScreenName:  interestedTwitterUser.ScreenName,
+			IsProtected: interestedTwitterUser.IsProtected,
+			Followstate: twitterclient.FollowState(interestedTwitterUser.Followstate),
+			MediaCount:  interestedTwitterUser.MediaCount,
+			Muting:      interestedTwitterUser.Muting,
+			Blocking:    interestedTwitterUser.Blocking,
+		}, Leid: nil})
 	}
 
 	return userList, nil
@@ -154,7 +164,22 @@ func syncLstAndGetMembers(ctx context.Context, client *resty.Client, db *sqlx.DB
 	packgedUsers := make([]UserWithinListEntity, 0, len(members))
 	eid := entity.Id()
 	for _, user := range members {
-		packgedUsers = append(packgedUsers, UserWithinListEntity{User: user, Leid: &eid})
+		packgedUsers = append(
+			packgedUsers,
+			UserWithinListEntity{
+				User: &twitterclient.User{
+					TwitterId:   user.TwitterId,
+					Name:        user.Name,
+					ScreenName:  user.ScreenName,
+					IsProtected: user.IsProtected,
+					Followstate: twitterclient.FollowState(user.Followstate),
+					MediaCount:  user.MediaCount,
+					Muting:      user.Muting,
+					Blocking:    user.Blocking,
+				},
+				Leid: &eid,
+			},
+		)
 	}
 	return packgedUsers, nil
 }

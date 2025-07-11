@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
 	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
-	"github.com/WangWilly/xSync/pkgs/twitter"
 	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/jmoiron/sqlx"
 )
@@ -346,10 +346,10 @@ func TestDumper(t *testing.T) {
 	}
 }
 
-func generateSomeTweets(n int) []*twitter.Tweet {
-	res := []*twitter.Tweet{}
+func generateSomeTweets(n int) []*twitterclient.Tweet {
+	res := []*twitterclient.Tweet{}
 	for i := 0; i < n; i++ {
-		tw := &twitter.Tweet{}
+		tw := &twitterclient.Tweet{}
 		tw.CreatedAt = time.Now()
 		tw.Creator = nil
 		tw.Id = uint64(i)

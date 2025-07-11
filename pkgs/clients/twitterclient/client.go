@@ -58,7 +58,8 @@ func NewWithConfig(config func(*resty.Client)) *Client {
 // Client State Management
 ////////////////////////////////////////////////////////////////////////////////
 
-// GetRestyClient returns the underlying resty client
+// Deprecated: intermediate function returns the underlying resty client for refactoring
+// (TODO: remove)
 func (c *Client) GetRestyClient() *resty.Client {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
