@@ -368,7 +368,7 @@ func (rl *rateLimiter) wouldBlock(path string) bool {
 // Client Management Operations
 ////////////////////////////////////////////////////////////////////////////////
 
-// GetClientScreenName retrieves the screen name associated with a client
+// GetClientScreenName retrieves the screen name associated with a client (V)
 func GetClientScreenName(client *resty.Client) string {
 	if v, ok := clientScreenNames.Load(client); ok {
 		return v.(string)
@@ -376,7 +376,7 @@ func GetClientScreenName(client *resty.Client) string {
 	return ""
 }
 
-// GetClientError retrieves any error associated with a client
+// GetClientError retrieves any error associated with a client (V)
 func GetClientError(cli *resty.Client) error {
 	if v, ok := clientErrors.Load(cli); ok {
 		return v.(error)
@@ -384,7 +384,7 @@ func GetClientError(cli *resty.Client) error {
 	return nil
 }
 
-// SetClientError sets an error for a client, marking it as unavailable
+// SetClientError sets an error for a client, marking it as unavailable (V)
 func SetClientError(cli *resty.Client, err error) {
 	clientErrors.Store(cli, err)
 	if err != nil {
@@ -392,7 +392,7 @@ func SetClientError(cli *resty.Client, err error) {
 	}
 }
 
-// GetClientRateLimiter retrieves the rate limiter associated with a client
+// GetClientRateLimiter retrieves the rate limiter associated with a client (V)
 func GetClientRateLimiter(cli *resty.Client) *rateLimiter {
 	if v, ok := clientRateLimiters.Load(cli); ok {
 		return v.(*rateLimiter)
@@ -400,7 +400,7 @@ func GetClientRateLimiter(cli *resty.Client) *rateLimiter {
 	return nil
 }
 
-// EnableRateLimit enables rate limiting for a client
+// EnableRateLimit enables rate limiting for a client (V)
 func EnableRateLimit(client *resty.Client) {
 	rateLimiter := newRateLimiter(true)
 	clientRateLimiters.Store(client, &rateLimiter)
@@ -441,7 +441,7 @@ func EnableRateLimit(client *resty.Client) {
 	})
 }
 
-// EnableRequestCounting enables API request counting for debugging
+// EnableRequestCounting enables API request counting for debugging (V)
 func EnableRequestCounting(client *resty.Client) {
 	client.OnBeforeRequest(func(c *resty.Client, req *resty.Request) error {
 		url, err := url.Parse(req.URL)
@@ -459,7 +459,7 @@ func EnableRequestCounting(client *resty.Client) {
 	})
 }
 
-// ReportRequestCount reports API request counts for debugging
+// ReportRequestCount reports API request counts for debugging (V)
 func ReportRequestCount() {
 	apiCounts.Range(func(key, value any) bool {
 		log.Debugf("* %s request count: %d", key, value.(*atomic.Int32).Load())
@@ -471,7 +471,7 @@ func ReportRequestCount() {
 // Client Selection and Utilities
 ////////////////////////////////////////////////////////////////////////////////
 
-// SelectClient selects an available client that won't block for the given path
+// SelectClient selects an available client that won't block for the given path (V)
 // 选择一个请求指定端点不会阻塞的客户端
 func SelectClient(ctx context.Context, clients []*resty.Client, path string) *resty.Client {
 	for ctx.Err() == nil {
@@ -514,7 +514,7 @@ func SelectClient(ctx context.Context, clients []*resty.Client, path string) *re
 	return nil
 }
 
-// SelectClientForMediaRequest selects a client suitable for user media requests
+// SelectClientForMediaRequest selects a client suitable for user media requests (V)
 func SelectClientForMediaRequest(ctx context.Context, clients []*resty.Client) *resty.Client {
 	return SelectClient(ctx, clients, (&userMediaQuery{}).Path())
 }

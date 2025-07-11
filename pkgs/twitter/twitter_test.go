@@ -117,7 +117,7 @@ func TestGetMedia(t *testing.T) {
 			//t.Errorf("%s is invisiable", test)
 			return
 		}
-		tweets, err := usr.GetMeidas(ctx, client, nil)
+		tweets, err := usr.GetMeidas(ctx, client, utils.TimeRange{})
 		if err != nil {
 			t.Error(err, usr)
 			return
@@ -135,7 +135,7 @@ func TestGetMedia(t *testing.T) {
 
 		// 区间测试
 		minIndex, maxIndex := makeMinMax(tweets)
-		tr := &utils.TimeRange{Min: tweets[minIndex+1].CreatedAt, Max: tweets[maxIndex-1].CreatedAt}
+		tr := utils.TimeRange{End: tweets[minIndex+1].CreatedAt, Begin: tweets[maxIndex-1].CreatedAt}
 		rangedTweets, err := usr.GetMeidas(ctx, client, tr)
 		if err != nil {
 			t.Error(err, usr, "range")
