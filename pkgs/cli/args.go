@@ -5,8 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/WangWilly/xSync/pkgs/twitter"
-	"github.com/go-resty/resty/v2"
+	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -20,10 +19,10 @@ type UserArgs struct {
 }
 
 // GetUser retrieves users from Twitter API based on user IDs and screen names
-func (u *UserArgs) GetUser(ctx context.Context, client *resty.Client) ([]*twitter.User, error) {
-	users := []*twitter.User{}
+func (u *UserArgs) GetUser(ctx context.Context, client *twitterclient.Client) ([]*twitterclient.User, error) {
+	users := []*twitterclient.User{}
 	for _, id := range u.id {
-		usr, err := twitter.NewUserById(ctx, client, id)
+		usr, err := client.GetUserById(ctx, id)
 		if err != nil {
 			return nil, err
 		}
@@ -31,7 +30,7 @@ func (u *UserArgs) GetUser(ctx context.Context, client *resty.Client) ([]*twitte
 	}
 
 	for _, screenName := range u.screenName {
-		usr, err := twitter.NewUserByScreenName(ctx, client, screenName)
+		usr, err := client.GetUserByScreenName(ctx, screenName)
 		if err != nil {
 			return nil, err
 		}
@@ -100,10 +99,10 @@ type ListArgs struct {
 }
 
 // GetList retrieves Twitter lists based on list IDs
-func (l ListArgs) GetList(ctx context.Context, client *resty.Client) ([]*twitter.List, error) {
-	lists := []*twitter.List{}
+func (l ListArgs) GetList(ctx context.Context, client *twitterclient.Client) ([]*twitterclient.List, error) {
+	lists := []*twitterclient.List{}
 	for _, id := range l.id {
-		list, err := twitter.NewList(ctx, client, id)
+		list, err := client.GetList(ctx, id)
 		if err != nil {
 			return nil, err
 		}

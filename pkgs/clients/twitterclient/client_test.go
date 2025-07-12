@@ -4,9 +4,6 @@ import (
 	"context"
 	"net/url"
 	"testing"
-	"time"
-
-	"github.com/go-resty/resty/v2"
 )
 
 func TestClientCreation(t *testing.T) {
@@ -22,22 +19,6 @@ func TestClientCreation(t *testing.T) {
 
 	if client.rateLimiter == nil {
 		t.Fatal("Client missing rate limiter")
-	}
-}
-
-func TestClientWithConfig(t *testing.T) {
-	// Test client creation with configuration
-	client := NewWithConfig(func(r *resty.Client) {
-		r.SetTimeout(10 * time.Second)
-	})
-
-	if client == nil {
-		t.Fatal("NewWithConfig() returned nil client")
-	}
-
-	// Check if configuration was applied
-	if client.restyClient.GetClient().Timeout != 10*time.Second {
-		t.Error("Configuration not applied correctly")
 	}
 }
 

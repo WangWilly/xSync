@@ -15,8 +15,8 @@ func New() *Repo {
 }
 
 func (r *Repo) Create(db *sqlx.DB, media *model.Media) error {
-	stmt := `INSERT INTO medias(user_id, tweet_id, location, created_at, updated_at) 
-			 VALUES(:user_id, :tweet_id, :location, :created_at, :updated_at)`
+	stmt := `INSERT INTO medias(user_id, tweet_id, location) 
+			 VALUES(:user_id, :tweet_id, :location)`
 	res, err := db.NamedExec(stmt, media)
 	if err != nil {
 		return err

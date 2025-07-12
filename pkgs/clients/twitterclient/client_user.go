@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/WangWilly/xSync/pkgs/utils"
-	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 )
 
@@ -47,11 +46,6 @@ type Tweet struct {
 	CreatedAt time.Time // When the tweet was created
 	Creator   *User     // User who created the tweet
 	Urls      []string  // Media URLs associated with the tweet
-}
-
-// UserFollowing represents a user's following list as a ListBase implementation
-type UserFollowing struct {
-	creator *User // The user whose following list this represents
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -119,8 +113,12 @@ func (u *User) Title() string {
 }
 
 // Following returns a UserFollowing interface for this user
-func (u *User) Following() UserFollowing {
-	return UserFollowing{u}
+func (u *User) Following() *UserFollowing {
+	return &UserFollowing{u}
+}
+
+func (u *User) GetMembers(ctx context.Context, client *Client) ([]*User, error) {
+	return client.GetAllFollowingMembers(ctx, u.TwitterId)
 }
 
 // IsVisible checks if the user's content is visible (either following or public account)
@@ -128,25 +126,9 @@ func (c *Client) isUserVisible(user *User) bool {
 	return user.Followstate == FS_FOLLOWING || !user.IsProtected
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// User Following Operations
-////////////////////////////////////////////////////////////////////////////////
-
-// GetMembers retrieves all users that the creator is following
-// GetId returns a negative ID to distinguish from regular lists
-func (fo UserFollowing) GetId() int64 {
-	return -int64(fo.creator.TwitterId)
-}
-
-// Title returns a formatted title for the following list
-func (fo UserFollowing) Title() string {
-	name := fmt.Sprintf("%s's Following", fo.creator.ScreenName)
-	return name
-}
-
 // GetMembers retrieves all users that the creator is following
 func (c *Client) GetUserFollowingMembers(ctx context.Context, fo UserFollowing) ([]*User, error) {
-	return c.GetAllFollowing(ctx, fo.creator.TwitterId)
+	return fo.GetMembers(ctx, c)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -303,39 +285,4 @@ func (c *Client) filterTweetsByTimeRange(tweetsFromLatestToEarliest []*Tweet, ti
 
 	res = tweetsFromLatestToEarliest[begin:end]
 	return
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Member Retrieval Operations
-////////////////////////////////////////////////////////////////////////////////
-
-// getMembers retrieves members from a timeline API endpoint
-func (c *Client) getMembers(ctx context.Context, api timelineApi, instsPath string) ([]*User, error) {
-	api.SetCursor("")
-	itemContents, err := c.getTimelineItemContentsTillEnd(ctx, api, instsPath)
-	if err != nil {
-		return nil, err
-	}
-	return c.itemContentsToUsers(itemContents), nil
-}
-
-// itemContentsToUsers converts timeline item contents to User objects
-func (c *Client) itemContentsToUsers(itemContents []gjson.Result) []*User {
-	users := make([]*User, 0, len(itemContents))
-	for _, ic := range itemContents {
-		user_results := c.getResults(ic, timelineUser)
-		if user_results.String() == "{}" {
-			continue
-		}
-		u, err := c.parseUserJson(&user_results)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"user_results": user_results.String(),
-				"reason":       err,
-			}).Debugf("failed to parse user_results")
-			continue
-		}
-		users = append(users, u)
-	}
-	return users
 }

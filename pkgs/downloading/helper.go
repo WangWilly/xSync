@@ -7,7 +7,6 @@ import (
 	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
-	"github.com/WangWilly/xSync/pkgs/downloading/mediadownloadhelper"
 	"github.com/WangWilly/xSync/pkgs/downloading/resolveworker"
 	"github.com/WangWilly/xSync/pkgs/workers"
 	"github.com/jmoiron/sqlx"
@@ -50,8 +49,7 @@ func (h *helper) BatchUserDownloadWithDB(ctx context.Context, db *sqlx.DB, users
 
 	h.heapHelper.MakeHeap(ctx, db, h.cfg.DownloadDir, h.cfg.AutoFollow)
 
-	mediaDownloadHelper := mediadownloadhelper.NewHelper()
-	dbWorker := resolveworker.NewDBWorker(mediaDownloadHelper, h.twitterClientManager)
+	dbWorker := resolveworker.NewDBWorker(h.twitterClientManager)
 	simpleWorker := workers.NewSimpleWorker[*dldto.NewEntity](ctx, cancel, h.cfg.MaxDownloadRoutine)
 
 	producer := func(ctx context.Context, cancel context.CancelCauseFunc, output chan<- *dldto.NewEntity) ([]*dldto.NewEntity, error) {
@@ -87,10 +85,11 @@ func (h *helper) BatchDownloadTweetWithDB(ctx context.Context, db *sqlx.DB, twee
 	defer cancel(nil)
 
 	logger := log.WithField("function", "BatchDownloadTweetWithDB")
-	logger.WithField("count", len(tweetDlMetas)).Info("starting batch tweet download with DB")
+	logger.
+		WithField("count", len(tweetDlMetas)).
+		Info("starting batch tweet download with DB")
 
-	mediaDownloadHelper := mediadownloadhelper.NewHelper()
-	dbWorker := resolveworker.NewDBWorker(mediaDownloadHelper, h.twitterClientManager)
+	dbWorker := resolveworker.NewDBWorker(h.twitterClientManager)
 	simpleWorker := workers.NewSimpleWorker[*dldto.NewEntity](ctx, cancel, min(len(tweetDlMetas), h.cfg.MaxDownloadRoutine))
 
 	producer := func(ctx context.Context, cancel context.CancelCauseFunc, output chan<- *dldto.NewEntity) ([]*dldto.NewEntity, error) {

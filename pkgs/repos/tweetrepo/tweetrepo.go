@@ -15,8 +15,8 @@ func New() *Repo {
 }
 
 func (r *Repo) Create(db *sqlx.DB, tweet *model.Tweet) error {
-	stmt := `INSERT INTO tweets(user_id, content, tweet_time, created_at, updated_at) 
-			 VALUES(:user_id, :content, :tweet_time, :created_at, :updated_at)`
+	stmt := `INSERT INTO tweets(user_id, tweet_id, content, tweet_time) 
+			 VALUES(:user_id, :tweet_id, :content, :tweet_time)`
 	res, err := db.NamedExec(stmt, tweet)
 	if err != nil {
 		return err
@@ -50,8 +50,8 @@ func (r *Repo) GetByUserId(db *sqlx.DB, userId uint64) ([]*model.Tweet, error) {
 
 func (r *Repo) Update(db *sqlx.DB, tweet *model.Tweet) error {
 	tweet.UpdatedAt = time.Now()
-	stmt := `UPDATE tweets SET content=?, tweet_time=?, updated_at=? WHERE id=?`
-	_, err := db.Exec(stmt, tweet.Content, tweet.TweetTime, tweet.UpdatedAt, tweet.Id)
+	stmt := `UPDATE tweets SET tweet_id=?, content=?, tweet_time=?, updated_at=? WHERE id=?`
+	_, err := db.Exec(stmt, tweet.TweetId, tweet.Content, tweet.TweetTime, tweet.UpdatedAt, tweet.Id)
 	return err
 }
 
@@ -101,4 +101,14 @@ func (r *Repo) GetWithMedia(db *sqlx.DB, userId uint64) ([]map[string]interface{
 	}
 
 	return results, nil
+}
+
+func (r *Repo) GetByTweetId(db *sqlx.DB, tweetId uint64) (*model.Tweet, error) {
+	stmt := `SELECT * FROM tweets WHERE tweet_id=?`
+	result := &model.Tweet{}
+	err := db.Get(result, stmt, tweetId)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return result, err
 }

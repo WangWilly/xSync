@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -18,20 +16,14 @@ import (
 	"github.com/WangWilly/xSync/pkgs/downloading"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
-	"github.com/WangWilly/xSync/pkgs/logger"
+	"github.com/WangWilly/xSync/pkgs/logging"
 	"github.com/WangWilly/xSync/pkgs/storage"
 	"github.com/WangWilly/xSync/pkgs/tasks"
 	"github.com/WangWilly/xSync/pkgs/twitter"
-	"github.com/WangWilly/xSync/pkgs/utils"
-	"github.com/go-resty/resty/v2"
 	"github.com/gookit/color"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 )
-
-////////////////////////////////////////////////////////////////////////////////
-// Main Application Entry Point
-////////////////////////////////////////////////////////////////////////////////
 
 func main() {
 	println("xSync - X Post Downloader")
@@ -86,7 +78,7 @@ func main() {
 		log.Fatalln("failed to create log file:", err)
 	}
 	defer logFile.Close()
-	logger.InitLogger(isDebug, logFile)
+	logging.InitLogger(isDebug, logFile)
 
 	// report at exit
 	defer func() {
@@ -95,9 +87,7 @@ func main() {
 		}
 	}()
 
-	////////////////////////////////////////////////////////////////////////////
 	// Configuration Loading
-	////////////////////////////////////////////////////////////////////////////
 	conf, err := config.ReadConfig(confPath)
 	if os.IsNotExist(err) || confArg {
 		conf, err = config.PromptConfig(confPath)
@@ -114,17 +104,52 @@ func main() {
 	}
 	log.Infoln("config is loaded")
 
-	////////////////////////////////////////////////////////////////////////////
 	// Storage Path Setup
-	////////////////////////////////////////////////////////////////////////////
 	pathHelper, err := storage.NewStorePath(conf.RootPath)
 	if err != nil {
 		log.Fatalln("failed to make store dir:", err)
 	}
 
+	// Database Connection
+	db, err := database.ConnectDatabase(pathHelper.DB)
+	if err != nil {
+		log.Fatalln("failed to connect to database:", err)
+	}
+	defer db.Close()
+	log.Infoln("database is connected")
+
+	// listen signal
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	defer close(sigChan)
+	defer signal.Stop(sigChan)
+	go func() {
+		sig, ok := <-sigChan
+		if ok {
+			log.Warnln("[listener] caught signal:", sig)
+			cancel()
+		}
+	}()
+
 	////////////////////////////////////////////////////////////////////////////
+	// Failed Tweets Dumping and Retry (Deferred)
+	////////////////////////////////////////////////////////////////////////////
+	dumper := downloading.NewDumper()
+	if err := dumper.Load(pathHelper.ErrorJ); err != nil {
+		log.Fatalln("failed to load previous tweets", err)
+	}
+	log.Infoln("loaded previous failed tweets:", dumper.Count())
+	var toDump = make([]*dldto.NewEntity, 0)
+	defer func() {
+		dumper.Dump(pathHelper.ErrorJ)
+		log.Infof("%d tweets have been dumped and will be downloaded the next time the program runs", dumper.Count())
+	}()
+
+	////////////////////////////////////////////////////////////////////////////
+	// Main Job Execution
+	////////////////////////////////////////////////////////////////////////////
+
 	// Twitter Authentication
-	////////////////////////////////////////////////////////////////////////////
 	client := twitterclient.New()
 	client.SetTwitterIdenty(ctx, conf.Cookie.AuthToken, conf.Cookie.Ct0)
 	client.SetRateLimit()
@@ -148,14 +173,12 @@ func main() {
 	}
 	defer clientLogFile.Close()
 
-	setClientLogger(client.GetRestyClient(), clientLogFile)
+	logging.SetTwitterClientLogger(client, clientLogFile)
 	for _, client := range addtionalClients {
-		setClientLogger(client.GetRestyClient(), clientLogFile)
+		logging.SetTwitterClientLogger(client, clientLogFile)
 	}
 
-	////////////////////////////////////////////////////////////////////////////
 	// Twitter Client Manager Setup
-	////////////////////////////////////////////////////////////////////////////
 	manager := twitterclient.NewManager()
 	manager.SetMasterClient(client)
 	if err := manager.AddClient(client); err != nil {
@@ -167,65 +190,18 @@ func main() {
 		}
 	}
 
-	////////////////////////////////////////////////////////////////////////////
-	// Previous Tweets Loading
-	////////////////////////////////////////////////////////////////////////////
-	dumper := downloading.NewDumper()
-	if err := dumper.Load(pathHelper.ErrorJ); err != nil {
-		log.Fatalln("failed to load previous tweets", err)
-	}
-	log.Infoln("loaded previous failed tweets:", dumper.Count())
-
-	////////////////////////////////////////////////////////////////////////////
-	// Task Collection
-	////////////////////////////////////////////////////////////////////////////
-	task, err := tasks.MakeTask(ctx, client.GetRestyClient(), usrArgs, listArgs, follArgs)
+	task, err := tasks.MakeTask(ctx, client, usrArgs, listArgs, follArgs)
 	if err != nil {
 		log.Fatalln("failed to parse cmd args:", err)
 	}
 
-	////////////////////////////////////////////////////////////////////////////
-	// Database Connection
-	////////////////////////////////////////////////////////////////////////////
-	db, err := connectDatabase(pathHelper.DB)
-	if err != nil {
-		log.Fatalln("failed to connect to database:", err)
-	}
-	defer db.Close()
-	log.Infoln("database is connected")
-
-	// listen signal
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	defer close(sigChan)
-	defer signal.Stop(sigChan)
-	go func() {
-		sig, ok := <-sigChan
-		if ok {
-			log.Warnln("[listener] caught signal:", sig)
-			cancel()
-		}
-	}()
-
-	////////////////////////////////////////////////////////////////////////////
-	// Failed Tweets Dumping and Retry (Deferred)
-	////////////////////////////////////////////////////////////////////////////
-	var toDump = make([]*dldto.NewEntity, 0)
-	defer func() {
-		dumper.Dump(pathHelper.ErrorJ)
-		log.Infof("%d tweets have been dumped and will be downloaded the next time the program runs", dumper.Count())
-	}()
-
-	////////////////////////////////////////////////////////////////////////////
-	// Main Job Execution
-	////////////////////////////////////////////////////////////////////////////
 	if len(task.Users) == 0 && len(task.Lists) == 0 {
 		return
 	}
 	log.Infoln("start working for...")
 	tasks.PrintTask(task)
 
-	usersWithinListEntity, err := heaphelper.WrapToUsersWithinListEntity(ctx, client.GetRestyClient(), db, task, pathHelper.Root)
+	usersWithinListEntity, err := heaphelper.WrapToUsersWithinListEntity(ctx, client, db, task, pathHelper.Root)
 	if err != nil || len(usersWithinListEntity) == 0 {
 		log.Fatalln("failed to wrap users within list entity:", err)
 	}
@@ -252,40 +228,6 @@ func main() {
 	if err != nil {
 		log.Errorln("failed to download:", err)
 	}
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Utility Functions
-////////////////////////////////////////////////////////////////////////////////
-
-func setClientLogger(client *resty.Client, out io.Writer) {
-	logger := log.New()
-	logger.SetLevel(log.InfoLevel)
-	logger.SetOutput(out)
-	logger.SetFormatter(&log.TextFormatter{
-		FullTimestamp: true,
-		DisableQuote:  true,
-	})
-	client.SetLogger(logger)
-}
-
-func connectDatabase(path string) (*sqlx.DB, error) {
-	ex, err := utils.PathExists(path)
-	if err != nil {
-		return nil, err
-	}
-
-	dsn := fmt.Sprintf("file:%s?_journal_mode=WAL&busy_timeout=2147483647", path)
-	db, err := sqlx.Connect("sqlite3", dsn)
-	if err != nil {
-		return nil, err
-	}
-	database.CreateTables(db)
-	//db.SetMaxOpenConns(1)
-	if !ex {
-		log.Debugln("created new db file", path)
-	}
-	return db, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////

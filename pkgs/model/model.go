@@ -67,6 +67,7 @@ type ListEntity struct {
 type Tweet struct {
 	Id        int64     `db:"id"`
 	UserId    uint64    `db:"user_id"`
+	TweetId   uint64    `db:"tweet_id"`
 	Content   string    `db:"content"`
 	TweetTime time.Time `db:"tweet_time"`
 	CreatedAt time.Time `db:"created_at"`

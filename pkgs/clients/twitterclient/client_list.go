@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 )
 
@@ -46,6 +47,38 @@ func (list *List) GetMembers(ctx context.Context, client *Client) ([]*User, erro
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// User Following Structure and Operations
+////////////////////////////////////////////////////////////////////////////////
+
+// UserFollowing represents a user's following list as a ListBase implementation
+type UserFollowing struct {
+	creator *User
+}
+
+// NewUserFollowing creates a new UserFollowing instance
+func NewUserFollowing(creator *User) *UserFollowing {
+	return &UserFollowing{
+		creator: creator,
+	}
+}
+
+// GetMembers retrieves all users that the creator is following
+func (fo *UserFollowing) GetMembers(ctx context.Context, client *Client) ([]*User, error) {
+	return client.GetAllFollowingMembers(ctx, fo.creator.TwitterId)
+}
+
+// GetId returns a negative ID to distinguish from regular lists
+func (fo *UserFollowing) GetId() int64 {
+	return -int64(fo.creator.TwitterId)
+}
+
+// Title returns a formatted title for the following list
+func (fo *UserFollowing) Title() string {
+	name := fmt.Sprintf("%s's Following", fo.creator.ScreenName)
+	return name
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // JSON Parsing and Data Conversion
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -69,4 +102,25 @@ func (c *Client) parseList(list *gjson.Result) (*List, error) {
 	result.MemberCount = int(member_count.Int())
 	result.Name = name.String()
 	return &result, nil
+}
+
+// itemContentsToUsers converts timeline item contents to User objects
+func (c *Client) itemContentsToUsers(itemContents []gjson.Result) []*User {
+	users := make([]*User, 0, len(itemContents))
+	for _, ic := range itemContents {
+		user_results := c.getResults(ic, timelineUser)
+		if user_results.String() == "{}" {
+			continue
+		}
+		u, err := c.parseUserJson(&user_results)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"user_results": user_results.String(),
+				"reason":       err,
+			}).Debugf("failed to parse user_results")
+			continue
+		}
+		users = append(users, u)
+	}
+	return users
 }

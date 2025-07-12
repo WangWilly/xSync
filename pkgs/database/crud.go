@@ -153,6 +153,10 @@ func DeleteTweet(db *sqlx.DB, id int64) error {
 	return tweetRepo.Delete(db, id)
 }
 
+func GetTweetByTweetId(db *sqlx.DB, twitterId uint64) (*Tweet, error) {
+	return tweetRepo.GetByTweetId(db, twitterId)
+}
+
 // Media CRUD operations - backward compatibility wrappers
 func CreateMedia(db *sqlx.DB, media *Media) error {
 	return mediaRepo.Create(db, media)

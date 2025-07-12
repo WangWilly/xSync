@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 )
 
@@ -17,27 +18,15 @@ const (
 	timelineUser         // Timeline item type for users
 )
 
-////////////////////////////////////////////////////////////////////////////////
-// Timeline API Interface
-////////////////////////////////////////////////////////////////////////////////
+type ListParams struct {
+	VariablesForm string
+	Features      string
 
-// timelineApi extends the basic api interface with cursor functionality for paginated endpoints
-type timelineApi interface {
-	SetCursor(cursor string)
-	Path() string
-	QueryParam() url.Values
-}
+	Id     uint64
+	Count  int
+	Cursor string
 
-////////////////////////////////////////////////////////////////////////////////
-// URL Construction Utilities
-////////////////////////////////////////////////////////////////////////////////
-
-// makeUrl constructs a complete URL from an API endpoint
-func (c *Client) makeUrl(api timelineApi) string {
-	u, _ := url.Parse(API_HOST)
-	u = u.JoinPath(api.Path())
-	u.RawQuery = api.QueryParam().Encode()
-	return u.String()
+	Extras map[string]string
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -134,10 +123,33 @@ func (c *Client) getResults(itemContent gjson.Result, itemType int) gjson.Result
 ////////////////////////////////////////////////////////////////////////////////
 
 // getTimelineResp makes HTTP request to timeline API endpoint
-func (c *Client) getTimelineResp(ctx context.Context, api timelineApi) ([]byte, error) {
-	url := c.makeUrl(api)
-	resp, err := c.restyClient.R().SetContext(ctx).Get(url)
+func (c *Client) getTimelineResp(ctx context.Context, path string, listParams ListParams) ([]byte, error) {
+	logger := log.WithFields(log.Fields{
+		"caller": "Client.getTimelineResp",
+		"client": c.screenName,
+		"path":   path,
+		"params": listParams,
+	})
+
+	u, _ := url.Parse(API_HOST)
+	u = u.JoinPath(path)
+
+	params := url.Values{}
+	if listParams.VariablesForm != "" {
+		params.Set("variables", fmt.Sprintf(listParams.VariablesForm, listParams.Id, listParams.Count, listParams.Cursor))
+	}
+	if listParams.Features != "" {
+		params.Set("features", listParams.Features)
+	}
+	for k, v := range listParams.Extras {
+		params.Set(k, v)
+	}
+
+	u.RawQuery = params.Encode()
+
+	resp, err := c.restyClient.R().SetContext(ctx).Get(u.String())
 	if err != nil {
+		logger.WithError(err).Error("failed to get timeline response")
 		return nil, err
 	}
 	return resp.Body(), nil
@@ -145,8 +157,8 @@ func (c *Client) getTimelineResp(ctx context.Context, api timelineApi) ([]byte, 
 
 // getTimelineItemContents retrieves timeline item contents for a single page
 // 获取时间线 API 并返回所有 itemContent 和 底部 cursor
-func (c *Client) getTimelineItemContents(ctx context.Context, api timelineApi, instPath string) ([]gjson.Result, string, error) {
-	resp, err := c.getTimelineResp(ctx, api)
+func (c *Client) getTimelineItemContents(ctx context.Context, path string, listParams ListParams, instPath string) ([]gjson.Result, string, error) {
+	resp, err := c.getTimelineResp(ctx, path, listParams)
 	if err != nil {
 		return nil, "", err
 	}
@@ -180,11 +192,10 @@ func (c *Client) getTimelineItemContents(ctx context.Context, api timelineApi, i
 }
 
 // getTimelineItemContentsTillEnd retrieves all timeline item contents across multiple pages
-func (c *Client) getTimelineItemContentsTillEnd(ctx context.Context, api timelineApi, instPath string) ([]gjson.Result, error) {
+func (c *Client) getTimelineItemContentsTillEnd(ctx context.Context, path string, listParams ListParams, instPath string) ([]gjson.Result, error) {
 	res := make([]gjson.Result, 0)
-
 	for {
-		page, next, err := c.getTimelineItemContents(ctx, api, instPath)
+		page, next, err := c.getTimelineItemContents(ctx, path, listParams, instPath)
 		if err != nil {
 			return nil, err
 		}
@@ -194,7 +205,7 @@ func (c *Client) getTimelineItemContentsTillEnd(ctx context.Context, api timelin
 		}
 
 		res = append(res, page...)
-		api.SetCursor(next)
+		listParams.Cursor = next
 	}
 
 	return res, nil

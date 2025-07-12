@@ -80,11 +80,13 @@ CREATE INDEX IF NOT EXISTS idx_user_links_user_id ON user_links (user_id);
 CREATE TABLE IF NOT EXISTS tweets (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	user_id INTEGER NOT NULL,
+	tweet_id INTEGER NOT NULL,
 	content TEXT NOT NULL,
 	tweet_time DATETIME NOT NULL,
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY(user_id) REFERENCES users (id)
+	FOREIGN KEY(user_id) REFERENCES users (id),
+	UNIQUE(tweet_id)
 );
 
 CREATE TABLE IF NOT EXISTS medias (
@@ -99,6 +101,7 @@ CREATE TABLE IF NOT EXISTS medias (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tweets_user_id ON tweets (user_id);
+CREATE INDEX IF NOT EXISTS idx_tweets_tweet_id ON tweets (tweet_id);
 CREATE INDEX IF NOT EXISTS idx_medias_user_id ON medias (user_id);
 CREATE INDEX IF NOT EXISTS idx_medias_tweet_id ON medias (tweet_id);
 CREATE INDEX IF NOT EXISTS idx_tweets_tweet_time ON tweets (tweet_time);

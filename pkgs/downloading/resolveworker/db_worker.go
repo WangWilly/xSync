@@ -22,14 +22,12 @@ import (
 // dbWorker extends the regular worker with database integration for tweets and media
 type dbWorker struct {
 	pushTimeout          time.Duration
-	mediaDownloadHelper  MediaDownloadHelper
 	twitterClientManager *twitterclient.Manager
 }
 
-func NewDBWorker(mediaDownloadHelper MediaDownloadHelper, twitterClientManager *twitterclient.Manager) *dbWorker {
+func NewDBWorker(twitterClientManager *twitterclient.Manager) *dbWorker {
 	return &dbWorker{
 		pushTimeout:          120 * time.Second,
-		mediaDownloadHelper:  mediaDownloadHelper,
 		twitterClientManager: twitterClientManager,
 	}
 }
@@ -194,26 +192,29 @@ tweetLoop:
 // saveTweetsToDatabase saves tweets to the database
 func (w *dbWorker) saveTweetsToDatabase(db *sqlx.DB, tweets []*twitterclient.Tweet, userId uint64, logger *log.Entry) {
 	for _, tweet := range tweets {
-		now := time.Now()
 		dbTweet := &database.Tweet{
 			UserId:    userId,
+			TweetId:   tweet.Id,
 			Content:   tweet.Text,
 			TweetTime: tweet.CreatedAt,
-			CreatedAt: now,
-			UpdatedAt: now,
 		}
 
 		if err := database.CreateTweet(db, dbTweet); err != nil {
-			logger.WithFields(log.Fields{
-				"tweet_id": tweet.Id,
-				"error":    err,
-			}).Error("failed to save tweet to database")
-		} else {
-			logger.WithFields(log.Fields{
+			logger.
+				WithFields(log.Fields{
+					"tweet_id": tweet.Id,
+					"error":    err,
+				}).
+				Error("failed to save tweet to database")
+			continue
+		}
+
+		logger.
+			WithFields(log.Fields{
 				"tweet_id": tweet.Id,
 				"db_id":    dbTweet.Id,
-			}).Debug("saved tweet to database")
-		}
+			}).
+			Debug("saved tweet to database")
 	}
 }
 
@@ -299,155 +300,104 @@ func (w *dbWorker) downloadTweetMediaWithDB(
 ) error {
 	tweet := tweetDlMeta.GetTweet()
 
-	// First, find the tweet in database by content and user ID (since we don't store Twitter's tweet ID)
-	tweets, err := database.GetTweetsByUserId(db, tweet.Creator.TwitterId)
+	dbTweet, err := database.GetTweetByTweetId(db, tweet.Id)
 	if err != nil {
 		logger.WithFields(log.Fields{
 			"tweet_id": tweet.Id,
 			"user_id":  tweet.Creator.TwitterId,
 			"error":    err,
-		}).Error("failed to get tweets from database")
+		}).Error("failed to get tweet from database by Twitter ID")
 		return err
 	}
-
-	// Find the matching tweet by content and tweet time
-	var dbTweetId *int64
-	for _, dbTweet := range tweets {
-		if dbTweet.Content == tweet.Text && dbTweet.TweetTime.Equal(tweet.CreatedAt) {
-			dbTweetId = &dbTweet.Id
-			break
-		}
-	}
-
-	client := w.twitterClientManager.GetMasterClient()
-	if dbTweetId == nil {
+	if dbTweet == nil {
 		logger.WithFields(log.Fields{
-			"tweet_id": tweet.Id,
-			"user_id":  tweet.Creator.TwitterId,
-		}).Warn("tweet not found in database, skipping media save")
-		// Still download the media even if we can't link it to database
-		return w.mediaDownloadHelper.SafeDownload(ctx, client, tweetDlMeta)
+			"tweet_id":   tweet.Id,
+			"twitter_id": tweet.Id,
+			"user_id":    tweet.Creator.TwitterId,
+		}).Error("tweet not found in database")
+		return fmt.Errorf("tweet with Twitter ID %d not found in database", tweet.Id)
 	}
 
-	// Create media records in database first to get the target locations
-	now := time.Now()
+	dbTweetId := dbTweet.Id
+	var urls []string
 	var mediaRecords []*database.Media
-
-	// Create media records for each URL
 	for i, url := range tweet.Urls {
 		// Extract filename from URL or use a generated name
 		fileName := filepath.Base(url)
+		ext, err := utils.GetExtFromUrl(url)
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"tweet_id": tweet.Id,
+				"url":      url,
+				"error":    err,
+			}).Error("failed to get file extension from URL")
+		}
+		if ext != "" {
+			fileName = fileName + ext
+		}
 		if fileName == "." || fileName == "/" {
 			fileName = fmt.Sprintf("media_%d_%d_%d", tweet.Id, time.Now().Unix(), i)
 		}
 
 		// Construct the full path where the media should be saved
 		mediaPath := filepath.Join(tweetDlMeta.GetPath(), fileName)
-
 		dbMedia := &database.Media{
-			UserId:    tweet.Creator.TwitterId,
-			TweetId:   *dbTweetId,
-			Location:  mediaPath,
-			CreatedAt: now,
-			UpdatedAt: now,
+			UserId:   tweet.Creator.TwitterId,
+			TweetId:  dbTweetId,
+			Location: mediaPath,
 		}
 
 		if err := database.CreateMedia(db, dbMedia); err != nil {
 			logger.WithFields(log.Fields{
 				"tweet_id":    tweet.Id,
-				"db_tweet_id": *dbTweetId,
+				"twitter_id":  tweet.Id,
+				"db_tweet_id": dbTweetId,
 				"media_path":  mediaPath,
 				"error":       err,
 			}).Error("failed to save media to database")
-			continue // Skip this media but continue with others
-		}
-
-		mediaRecords = append(mediaRecords, dbMedia)
-		logger.WithFields(log.Fields{
-			"tweet_id":    tweet.Id,
-			"db_tweet_id": *dbTweetId,
-			"media_id":    dbMedia.Id,
-			"path":        mediaPath,
-		}).Debug("created media record in database")
-	}
-
-	// // If no media records were created, fall back to original download
-	// if len(mediaRecords) == 0 {
-	// 	logger.WithFields(log.Fields{
-	// 		"tweet_id": tweet.Id,
-	// 	}).Warn("no media records created, falling back to original download")
-	// 	return w.mediaDownloadHelper.SafeDownload(ctx, client, tweetDlMeta)
-	// }
-
-	// Now download media files using the database locations
-	return w.downloadMediaToDBLocations(ctx, tweet, mediaRecords, logger)
-}
-
-// downloadMediaToDBLocations downloads media files to the locations specified in database records
-func (w *dbWorker) downloadMediaToDBLocations(
-	ctx context.Context,
-	tweet *twitterclient.Tweet,
-	mediaRecords []*database.Media,
-	logger *log.Entry,
-) error {
-	// Download each media file to its database location
-	for i, url := range tweet.Urls {
-		if i >= len(mediaRecords) {
-			logger.WithFields(log.Fields{
-				"tweet_id": tweet.Id,
-				"url":      url,
-			}).Warn("more URLs than media records, skipping")
 			continue
 		}
 
+		urls = append(urls, url)
+		mediaRecords = append(mediaRecords, dbMedia)
+		logger.
+			WithFields(log.Fields{
+				"tweet_id":    tweet.Id,
+				"twitter_id":  tweet.Id,
+				"db_tweet_id": dbTweetId,
+				"media_id":    dbMedia.Id,
+				"path":        mediaPath,
+			}).
+			Debug("created media record in database")
+	}
+
+	for i, url := range urls {
 		mediaRecord := mediaRecords[i]
 		targetPath := mediaRecord.Location
 
-		// Ensure directory exists
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-			logger.WithFields(log.Fields{
-				"tweet_id": tweet.Id,
-				"path":     targetPath,
-				"error":    err,
-			}).Error("failed to create directory for media")
+			logger.
+				WithFields(log.Fields{
+					"path":  targetPath,
+					"error": err,
+				}).
+				Error("failed to create directory for media")
 			continue
 		}
 
-		// Download the file
-		client := w.twitterClientManager.GetMasterClient().GetRestyClient()
-		resp, err := client.R().
-			SetContext(ctx).
-			SetOutput(targetPath).
-			Get(url)
-
+		err := w.twitterClientManager.
+			GetMasterClient().
+			DownloadToStorageByUrl(ctx, url, targetPath, "4096x4096")
 		if err != nil {
-			logger.WithFields(log.Fields{
-				"tweet_id": tweet.Id,
-				"media_id": mediaRecord.Id,
-				"url":      url,
-				"target":   targetPath,
-				"error":    err,
-			}).Error("failed to download media file")
-			continue
+			logger.
+				WithFields(log.Fields{
+					"media_id": mediaRecord.Id,
+					"url":      url,
+					"target":   targetPath,
+					"error":    err,
+				}).
+				Error("failed to download media file")
 		}
-
-		if resp.StatusCode() != 200 {
-			logger.WithFields(log.Fields{
-				"tweet_id":    tweet.Id,
-				"media_id":    mediaRecord.Id,
-				"url":         url,
-				"target":      targetPath,
-				"status_code": resp.StatusCode(),
-			}).Error("media download returned non-200 status")
-			continue
-		}
-
-		logger.WithFields(log.Fields{
-			"tweet_id": tweet.Id,
-			"media_id": mediaRecord.Id,
-			"path":     targetPath,
-			"size":     len(resp.Body()),
-		}).Debug("successfully downloaded media to database location")
 	}
 
 	return nil

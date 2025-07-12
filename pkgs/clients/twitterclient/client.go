@@ -48,23 +48,14 @@ func New() *Client {
 	}
 }
 
-func NewWithConfig(config func(*resty.Client)) *Client {
-	client := New()
-	config(client.restyClient)
-	return client
+////////////////////////////////////////////////////////////////////////////////
+
+func (c *Client) SetLogger(logger *log.Logger) {
+	c.restyClient.SetLogger(logger)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Client State Management
-////////////////////////////////////////////////////////////////////////////////
-
-// Deprecated: intermediate function returns the underlying resty client for refactoring
-// (TODO: remove)
-func (c *Client) GetRestyClient() *resty.Client {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-	return c.restyClient
-}
 
 // GetError returns any error associated with the client
 func (c *Client) GetError() error {
