@@ -1,4 +1,4 @@
-package twitter
+package twitterclient
 
 import (
 	"github.com/tidwall/gjson"

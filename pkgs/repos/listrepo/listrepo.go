@@ -14,7 +14,7 @@ func New() *Repo {
 	return &Repo{}
 }
 
-func (r *Repo) Create(db *sqlx.DB, lst *model.Lst) error {
+func (r *Repo) Create(db *sqlx.DB, lst *model.List) error {
 	stmt := `INSERT INTO lsts(id, name, owner_uid) VALUES(:id, :name, :owner_uid)`
 	_, err := db.NamedExec(stmt, &lst)
 	return err
@@ -26,9 +26,9 @@ func (r *Repo) Delete(db *sqlx.DB, lid uint64) error {
 	return err
 }
 
-func (r *Repo) GetById(db *sqlx.DB, lid uint64) (*model.Lst, error) {
+func (r *Repo) GetById(db *sqlx.DB, lid uint64) (*model.List, error) {
 	stmt := `SELECT * FROM lsts WHERE id = ?`
-	result := &model.Lst{}
+	result := &model.List{}
 	err := db.Get(result, stmt, lid)
 	if err == sql.ErrNoRows {
 		err = nil
@@ -40,7 +40,7 @@ func (r *Repo) GetById(db *sqlx.DB, lid uint64) (*model.Lst, error) {
 	return result, nil
 }
 
-func (r *Repo) Update(db *sqlx.DB, lst *model.Lst) error {
+func (r *Repo) Update(db *sqlx.DB, lst *model.List) error {
 	stmt := `UPDATE lsts SET name=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`
 	_, err := db.Exec(stmt, lst.Name, lst.Id)
 	return err

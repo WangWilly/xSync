@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/WangWilly/xSync/pkgs/cli"
 	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
+	"github.com/WangWilly/xSync/pkgs/commandline"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -39,7 +39,7 @@ func PrintTask(task *Task) {
 }
 
 // MakeTask creates a new task from CLI arguments
-func MakeTask(ctx context.Context, client *twitterclient.Client, usrArgs cli.UserArgs, listArgs cli.ListArgs, follArgs cli.UserArgs) (*Task, error) {
+func MakeTask(ctx context.Context, client *twitterclient.Client, usrArgs commandline.UserArgs, listArgs commandline.ListArgs, follArgs commandline.UserArgs) (*Task, error) {
 	task := Task{}
 
 	task.Users = make([]*twitterclient.User, 0)

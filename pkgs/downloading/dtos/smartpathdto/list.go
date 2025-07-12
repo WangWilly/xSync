@@ -6,11 +6,12 @@ import (
 	"path/filepath"
 
 	"github.com/WangWilly/xSync/pkgs/database"
+	"github.com/WangWilly/xSync/pkgs/model"
 	"github.com/jmoiron/sqlx"
 )
 
 type ListSmartPath struct {
-	record  *database.ListEntity
+	record  *model.ListEntity
 	db      *sqlx.DB
 	Created bool
 }
@@ -22,7 +23,7 @@ func NewListSmartPath(db *sqlx.DB, lid int64, parentDir string) (*ListSmartPath,
 		return nil, err
 	}
 	if record == nil {
-		record = &database.ListEntity{}
+		record = &model.ListEntity{}
 		record.LstId = lid
 		record.ParentDir = parentDir
 		created = false

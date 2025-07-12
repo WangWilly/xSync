@@ -10,6 +10,7 @@ import (
 	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
+	"github.com/WangWilly/xSync/pkgs/model"
 	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/jmoiron/sqlx"
 
@@ -163,7 +164,7 @@ func (h *helper) MakeHeap(
 		upath, _ := userSmartPath.Path()
 		var linkname = userSmartPath.Name()
 
-		curlink := &database.UserLink{}
+		curlink := &model.UserLink{}
 		curlink.Name = linkname
 		curlink.ParentLstEntityId = int32(*leid)
 		curlink.Uid = user.TwitterId

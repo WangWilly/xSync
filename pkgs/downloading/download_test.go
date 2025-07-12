@@ -11,6 +11,7 @@ import (
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
 	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
+	"github.com/WangWilly/xSync/pkgs/model"
 	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/jmoiron/sqlx"
 )
@@ -34,7 +35,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	database.CreateTables(db)
+	model.CreateTables(db)
 }
 
 func TestUserEntity(t *testing.T) {

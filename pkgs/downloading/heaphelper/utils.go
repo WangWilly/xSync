@@ -7,7 +7,7 @@ import (
 	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
-	"github.com/WangWilly/xSync/pkgs/twitter"
+	"github.com/WangWilly/xSync/pkgs/model"
 	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/jmoiron/sqlx"
 )
@@ -46,7 +46,7 @@ func syncTwitterUserToDb(db *sqlx.DB, twitterUser *twitterclient.User) error {
 
 	if userRecord == nil {
 		isNew = true
-		userRecord = &database.User{}
+		userRecord = &model.User{}
 		userRecord.Id = twitterUser.TwitterId
 	} else {
 		renamed = userRecord.Name != twitterUser.Name || userRecord.ScreenName != twitterUser.ScreenName
@@ -74,7 +74,7 @@ func syncTwitterUserToDb(db *sqlx.DB, twitterUser *twitterclient.User) error {
 ////////////////////////////////////////////////////////////////////////////////
 // TODO: make private
 
-func UpdateUserLink(lnk *database.UserLink, db *sqlx.DB, path string) error {
+func UpdateUserLink(lnk *model.UserLink, db *sqlx.DB, path string) error {
 	name := filepath.Base(path)
 
 	linkpath, err := lnk.Path(db)
@@ -120,8 +120,8 @@ func CalcUserDepth(exist int, total int) int {
 	}
 
 	miss := total - exist
-	depth := miss / twitter.AvgTweetsPerPage
-	if miss%twitter.AvgTweetsPerPage != 0 {
+	depth := miss / twitterclient.AvgTweetsPerPage
+	if miss%twitterclient.AvgTweetsPerPage != 0 {
 		depth++
 	}
 	if exist == 0 {

@@ -9,8 +9,8 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/WangWilly/xSync/pkgs/cli"
 	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
+	"github.com/WangWilly/xSync/pkgs/commandline"
 	"github.com/WangWilly/xSync/pkgs/config"
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading"
@@ -19,7 +19,6 @@ import (
 	"github.com/WangWilly/xSync/pkgs/logging"
 	"github.com/WangWilly/xSync/pkgs/storage"
 	"github.com/WangWilly/xSync/pkgs/tasks"
-	"github.com/WangWilly/xSync/pkgs/twitter"
 	"github.com/gookit/color"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
@@ -31,9 +30,9 @@ func main() {
 	////////////////////////////////////////////////////////////////////////////
 	// Command Line Arguments Setup
 	////////////////////////////////////////////////////////////////////////////
-	var usrArgs cli.UserArgs
-	var listArgs cli.ListArgs
-	var follArgs cli.UserArgs
+	var usrArgs commandline.UserArgs
+	var listArgs commandline.ListArgs
+	var follArgs commandline.UserArgs
 	var confArg bool
 	var isDebug bool
 	var autoFollow bool
@@ -79,13 +78,6 @@ func main() {
 	}
 	defer logFile.Close()
 	logging.InitLogger(isDebug, logFile)
-
-	// report at exit
-	defer func() {
-		if isDebug {
-			twitter.ReportRequestCount()
-		}
-	}()
 
 	// Configuration Loading
 	conf, err := config.ReadConfig(confPath)
@@ -164,7 +156,7 @@ func main() {
 		log.Warnln("failed to load additional cookies:", err)
 	}
 	log.Debugln("loaded additional cookies:", len(cookies))
-	addtionalClients := cli.BatchLogin(ctx, cookies)
+	addtionalClients := commandline.BatchLogin(ctx, cookies)
 
 	// set logger to clients
 	clientLogFile, err := os.OpenFile(cliLogPath, os.O_TRUNC|os.O_WRONLY|os.O_CREATE, 0644)
@@ -189,6 +181,12 @@ func main() {
 			log.Warnln("failed to add additional client to manager:", err)
 		}
 	}
+	// report at exit
+	defer func() {
+		for path, count := range manager.GetApiCounts() {
+			log.Infof("API %s called %d times", path, count)
+		}
+	}()
 
 	task, err := tasks.MakeTask(ctx, client, usrArgs, listArgs, follArgs)
 	if err != nil {

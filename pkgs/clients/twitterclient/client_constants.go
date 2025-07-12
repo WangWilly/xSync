@@ -35,3 +35,5 @@ const (
 	DEFAULT_MEMBERS_PAGE_SIZE = 200
 	AVG_TWEETS_PER_PAGE       = 70
 )
+
+const AvgTweetsPerPage = 70

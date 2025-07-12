@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/WangWilly/xSync/pkgs/model"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -28,12 +29,12 @@ func opentmpdb() *sqlx.DB {
 		panic(err)
 	}
 
-	CreateTables(db)
+	model.CreateTables(db)
 	return db
 }
 
-func generateUser(n int) *User {
-	usr := &User{}
+func generateUser(n int) *model.User {
+	usr := &model.User{}
 	usr.Id = uint64(n)
 	name := fmt.Sprintf("user%d", n)
 	usr.ScreenName = name
@@ -45,7 +46,7 @@ func TestUserOperation(t *testing.T) {
 	defer db.Close()
 
 	n := 100
-	users := make([]*User, n)
+	users := make([]*model.User, n)
 	for i := 0; i < n; i++ {
 		users[i] = generateUser(i)
 	}
@@ -55,7 +56,7 @@ func TestUserOperation(t *testing.T) {
 	}
 }
 
-func testUser(t *testing.T, usr *User) {
+func testUser(t *testing.T, usr *model.User) {
 	// create
 	if err := CreateUser(db, usr); err != nil {
 		t.Error(err)
@@ -111,7 +112,7 @@ func testUser(t *testing.T, usr *User) {
 	}
 }
 
-func hasSameUserRecord(usr *User) (bool, error) {
+func hasSameUserRecord(usr *model.User) (bool, error) {
 	retrieved, err := GetUserById(db, usr.Id)
 	if err != nil {
 		return false, err
@@ -127,8 +128,8 @@ func hasSameUserRecord(usr *User) (bool, error) {
 		retrieved.FriendsCount == usr.FriendsCount, nil
 }
 
-func generateList(id int) *Lst {
-	lst := &Lst{}
+func generateList(id int) *model.List {
+	lst := &model.List{}
 	lst.Id = uint64(id)
 	lst.Name = fmt.Sprintf("lst%d", id)
 	return lst
@@ -138,7 +139,7 @@ func TestList(t *testing.T) {
 	db = opentmpdb()
 	defer db.Close()
 	n := 100
-	lsts := make([]*Lst, n)
+	lsts := make([]*model.List, n)
 	for i := 0; i < n; i++ {
 		lsts[i] = generateList(i)
 	}
@@ -194,7 +195,7 @@ func TestList(t *testing.T) {
 	}
 }
 
-func isSameLstRecord(lst *Lst) (bool, error) {
+func isSameLstRecord(lst *model.List) (bool, error) {
 	record, err := GetLst(db, lst.Id)
 	if err != nil {
 		return false, err
@@ -212,7 +213,7 @@ func TestUserEntity(t *testing.T) {
 	db = opentmpdb()
 	defer db.Close()
 	n := 100
-	entities := make([]*UserEntity, n)
+	entities := make([]*model.UserEntity, n)
 	tempDir := os.TempDir()
 	for i := 0; i < n; i++ {
 		entities[i] = generateUserEntity(uint64(i), tempDir)
@@ -308,8 +309,8 @@ func TestUserEntity(t *testing.T) {
 	}
 }
 
-func generateUserEntity(uid uint64, pdir string) *UserEntity {
-	ue := UserEntity{}
+func generateUserEntity(uid uint64, pdir string) *model.UserEntity {
+	ue := model.UserEntity{}
 	user := generateUser(int(uid))
 	if err := CreateUser(db, user); err != nil {
 		panic(err)
@@ -321,7 +322,7 @@ func generateUserEntity(uid uint64, pdir string) *UserEntity {
 	return &ue
 }
 
-func hasSameUserEntityRecord(entity *UserEntity) (bool, error) {
+func hasSameUserEntityRecord(entity *model.UserEntity) (bool, error) {
 	record, err := GetUserEntityById(db, int(entity.Id.Int32))
 	if err != nil {
 		return false, err
@@ -342,7 +343,7 @@ func TestLstEntity(t *testing.T) {
 	defer db.Close()
 	tempdir := os.TempDir()
 	n := 100
-	entities := make([]*ListEntity, n)
+	entities := make([]*model.ListEntity, n)
 	for i := 0; i < n; i++ {
 		entities[i] = generateLstEntity(int64(i), tempdir)
 	}
@@ -422,19 +423,19 @@ func TestLstEntity(t *testing.T) {
 	}
 }
 
-func generateLstEntity(lid int64, pdir string) *ListEntity {
+func generateLstEntity(lid int64, pdir string) *model.ListEntity {
 	lst := generateList(int(lid))
 	if err := CreateLst(db, lst); err != nil {
 		panic(err)
 	}
-	entity := ListEntity{}
+	entity := model.ListEntity{}
 	entity.LstId = lid
 	entity.ParentDir = pdir
 	entity.Name = lst.Name
 	return &entity
 }
 
-func hasSameLstEntityRecord(entity *ListEntity) (bool, error) {
+func hasSameLstEntityRecord(entity *model.ListEntity) (bool, error) {
 	record, err := GetListEntityById(db, int(entity.Id.Int32))
 	if err != nil {
 		return false, err
@@ -453,7 +454,7 @@ func TestLink(t *testing.T) {
 	db = opentmpdb()
 	defer db.Close()
 	n := 100
-	links := make([]*UserLink, n)
+	links := make([]*model.UserLink, n)
 	for i := 0; i < n; i++ {
 		links[i] = generateLink(i, i)
 	}
@@ -545,21 +546,21 @@ func TestLink(t *testing.T) {
 	}
 }
 
-func generateLink(uid int, lid int) *UserLink {
+func generateLink(uid int, lid int) *model.UserLink {
 	usr := generateUser(uid)
 	le := generateLstEntity(int64(lid), os.TempDir())
 	if err := CreateLstEntity(db, le); err != nil {
 		panic(err)
 	}
 
-	ul := UserLink{}
+	ul := model.UserLink{}
 	ul.Name = fmt.Sprintf("%d-%d", lid, uid)
 	ul.ParentLstEntityId = le.Id.Int32
 	ul.Uid = usr.Id
 	return &ul
 }
 
-func hasSameUserLinkRecord(link *UserLink) (bool, error) {
+func hasSameUserLinkRecord(link *model.UserLink) (bool, error) {
 	record, err := GetUserLink(db, link.Uid, link.ParentLstEntityId)
 	if err != nil {
 		return false, err
@@ -579,7 +580,7 @@ func benchmarkUpdateUser(b *testing.B, routines int) {
 	defer db.Close()
 
 	n := 500
-	users := make(chan *User, n)
+	users := make(chan *model.User, n)
 	for i := 0; i < n; i++ {
 		user := generateUser(i)
 		if err := CreateUser(db, user); err != nil {

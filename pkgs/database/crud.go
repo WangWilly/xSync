@@ -3,6 +3,7 @@ package database
 import (
 	"time"
 
+	"github.com/WangWilly/xSync/pkgs/model"
 	"github.com/WangWilly/xSync/pkgs/repos/listrepo"
 	"github.com/WangWilly/xSync/pkgs/repos/mediarepo"
 	"github.com/WangWilly/xSync/pkgs/repos/tweetrepo"
@@ -20,7 +21,7 @@ var (
 )
 
 // User CRUD operations - backward compatibility wrappers
-func CreateUser(db *sqlx.DB, usr *User) error {
+func CreateUser(db *sqlx.DB, usr *model.User) error {
 	return userRepo.Create(db, usr)
 }
 
@@ -28,16 +29,16 @@ func DelUser(db *sqlx.DB, uid uint64) error {
 	return userRepo.Delete(db, uid)
 }
 
-func GetUserById(db *sqlx.DB, uid uint64) (*User, error) {
+func GetUserById(db *sqlx.DB, uid uint64) (*model.User, error) {
 	return userRepo.GetById(db, uid)
 }
 
-func UpdateUser(db *sqlx.DB, usr *User) error {
+func UpdateUser(db *sqlx.DB, usr *model.User) error {
 	return userRepo.Update(db, usr)
 }
 
 // UserEntity CRUD operations - backward compatibility wrappers
-func CreateUserEntity(db *sqlx.DB, entity *UserEntity) error {
+func CreateUserEntity(db *sqlx.DB, entity *model.UserEntity) error {
 	return userRepo.CreateEntity(db, entity)
 }
 
@@ -45,15 +46,15 @@ func DelUserEntity(db *sqlx.DB, id uint32) error {
 	return userRepo.DeleteEntity(db, id)
 }
 
-func GetUserEntity(db *sqlx.DB, uid uint64, parentDir string) (*UserEntity, error) {
+func GetUserEntity(db *sqlx.DB, uid uint64, parentDir string) (*model.UserEntity, error) {
 	return userRepo.GetEntity(db, uid, parentDir)
 }
 
-func GetUserEntityById(db *sqlx.DB, id int) (*UserEntity, error) {
+func GetUserEntityById(db *sqlx.DB, id int) (*model.UserEntity, error) {
 	return userRepo.GetEntityById(db, id)
 }
 
-func UpdateUserEntity(db *sqlx.DB, entity *UserEntity) error {
+func UpdateUserEntity(db *sqlx.DB, entity *model.UserEntity) error {
 	return userRepo.UpdateEntity(db, entity)
 }
 
@@ -73,8 +74,8 @@ func RecordUserPreviousName(db *sqlx.DB, uid uint64, name string, screenName str
 	return userRepo.RecordPreviousName(db, uid, name, screenName)
 }
 
-// UserLink CRUD operations - backward compatibility wrappers
-func CreateUserLink(db *sqlx.DB, lnk *UserLink) error {
+// model.UserLink CRUD operations - backward compatibility wrappers
+func CreateUserLink(db *sqlx.DB, lnk *model.UserLink) error {
 	return userRepo.CreateLink(db, lnk)
 }
 
@@ -82,11 +83,11 @@ func DelUserLink(db *sqlx.DB, id int32) error {
 	return userRepo.DeleteLink(db, id)
 }
 
-func GetUserLinks(db *sqlx.DB, uid uint64) ([]*UserLink, error) {
+func GetUserLinks(db *sqlx.DB, uid uint64) ([]*model.UserLink, error) {
 	return userRepo.GetLinks(db, uid)
 }
 
-func GetUserLink(db *sqlx.DB, uid uint64, parentLstEntityId int32) (*UserLink, error) {
+func GetUserLink(db *sqlx.DB, uid uint64, parentLstEntityId int32) (*model.UserLink, error) {
 	return userRepo.GetLink(db, uid, parentLstEntityId)
 }
 
@@ -95,7 +96,7 @@ func UpdateUserLink(db *sqlx.DB, id int32, name string) error {
 }
 
 // List CRUD operations - backward compatibility wrappers
-func CreateLst(db *sqlx.DB, lst *Lst) error {
+func CreateLst(db *sqlx.DB, lst *model.List) error {
 	return listRepo.Create(db, lst)
 }
 
@@ -103,16 +104,16 @@ func DelLst(db *sqlx.DB, lid uint64) error {
 	return listRepo.Delete(db, lid)
 }
 
-func GetLst(db *sqlx.DB, lid uint64) (*Lst, error) {
+func GetLst(db *sqlx.DB, lid uint64) (*model.List, error) {
 	return listRepo.GetById(db, lid)
 }
 
-func UpdateLst(db *sqlx.DB, lst *Lst) error {
+func UpdateLst(db *sqlx.DB, lst *model.List) error {
 	return listRepo.Update(db, lst)
 }
 
-// ListEntity CRUD operations - backward compatibility wrappers
-func CreateLstEntity(db *sqlx.DB, entity *ListEntity) error {
+// model.ListEntity CRUD operations - backward compatibility wrappers
+func CreateLstEntity(db *sqlx.DB, entity *model.ListEntity) error {
 	return listRepo.CreateEntity(db, entity)
 }
 
@@ -120,32 +121,32 @@ func DelLstEntity(db *sqlx.DB, id int) error {
 	return listRepo.DeleteEntity(db, id)
 }
 
-func GetListEntityById(db *sqlx.DB, id int) (*ListEntity, error) {
+func GetListEntityById(db *sqlx.DB, id int) (*model.ListEntity, error) {
 	return listRepo.GetEntityById(db, id)
 }
 
-func GetListEntity(db *sqlx.DB, lid int64, parentDir string) (*ListEntity, error) {
+func GetListEntity(db *sqlx.DB, lid int64, parentDir string) (*model.ListEntity, error) {
 	return listRepo.GetEntity(db, lid, parentDir)
 }
 
-func UpdateLstEntity(db *sqlx.DB, entity *ListEntity) error {
+func UpdateLstEntity(db *sqlx.DB, entity *model.ListEntity) error {
 	return listRepo.UpdateEntity(db, entity)
 }
 
-// Tweet CRUD operations - backward compatibility wrappers
-func CreateTweet(db *sqlx.DB, tweet *Tweet) error {
+// model.Tweet CRUD operations - backward compatibility wrappers
+func CreateTweet(db *sqlx.DB, tweet *model.Tweet) error {
 	return tweetRepo.Create(db, tweet)
 }
 
-func GetTweetById(db *sqlx.DB, id int64) (*Tweet, error) {
+func GetTweetById(db *sqlx.DB, id int64) (*model.Tweet, error) {
 	return tweetRepo.GetById(db, id)
 }
 
-func GetTweetsByUserId(db *sqlx.DB, userId uint64) ([]*Tweet, error) {
+func GetTweetsByUserId(db *sqlx.DB, userId uint64) ([]*model.Tweet, error) {
 	return tweetRepo.GetByUserId(db, userId)
 }
 
-func UpdateTweet(db *sqlx.DB, tweet *Tweet) error {
+func UpdateTweet(db *sqlx.DB, tweet *model.Tweet) error {
 	return tweetRepo.Update(db, tweet)
 }
 
@@ -153,32 +154,32 @@ func DeleteTweet(db *sqlx.DB, id int64) error {
 	return tweetRepo.Delete(db, id)
 }
 
-func GetTweetByTweetId(db *sqlx.DB, twitterId uint64) (*Tweet, error) {
+func GetTweetByTweetId(db *sqlx.DB, twitterId uint64) (*model.Tweet, error) {
 	return tweetRepo.GetByTweetId(db, twitterId)
 }
 
-// Media CRUD operations - backward compatibility wrappers
-func CreateMedia(db *sqlx.DB, media *Media) error {
+// model.Media CRUD operations - backward compatibility wrappers
+func CreateMedia(db *sqlx.DB, media *model.Media) error {
 	return mediaRepo.Create(db, media)
 }
 
-func GetMediaById(db *sqlx.DB, id int64) (*Media, error) {
+func GetMediaById(db *sqlx.DB, id int64) (*model.Media, error) {
 	return mediaRepo.GetById(db, id)
 }
 
-func GetMediasByUserId(db *sqlx.DB, userId uint64) ([]*Media, error) {
+func GetMediasByUserId(db *sqlx.DB, userId uint64) ([]*model.Media, error) {
 	return mediaRepo.GetByUserId(db, userId)
 }
 
-func GetMediasByTweetId(db *sqlx.DB, tweetId int64) ([]*Media, error) {
+func GetMediasByTweetId(db *sqlx.DB, tweetId int64) ([]*model.Media, error) {
 	return mediaRepo.GetByTweetId(db, tweetId)
 }
 
-func GetMediaByLocation(db *sqlx.DB, location string) (*Media, error) {
+func GetMediaByLocation(db *sqlx.DB, location string) (*model.Media, error) {
 	return mediaRepo.GetByLocation(db, location)
 }
 
-func UpdateMedia(db *sqlx.DB, media *Media) error {
+func UpdateMedia(db *sqlx.DB, media *model.Media) error {
 	return mediaRepo.Update(db, media)
 }
 

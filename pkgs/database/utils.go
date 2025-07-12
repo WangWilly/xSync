@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 
+	"github.com/WangWilly/xSync/pkgs/model"
 	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/jmoiron/sqlx"
 
@@ -25,7 +26,7 @@ func ConnectDatabase(path string) (*sqlx.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	CreateTables(db)
+	model.CreateTables(db)
 	//db.SetMaxOpenConns(1)
 
 	if !ex {

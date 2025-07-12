@@ -47,7 +47,7 @@ type UserLink struct {
 	UpdatedAt         time.Time     `db:"updated_at"`
 }
 
-type Lst struct {
+type List struct {
 	Id        uint64    `db:"id"`
 	Name      string    `db:"name"`
 	OwnerId   uint64    `db:"owner_uid"`

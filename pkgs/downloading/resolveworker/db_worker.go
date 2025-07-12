@@ -13,7 +13,7 @@ import (
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
-	"github.com/WangWilly/xSync/pkgs/twitter"
+	"github.com/WangWilly/xSync/pkgs/model"
 	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
@@ -112,18 +112,18 @@ func (w *dbWorker) fetchTweetOrFallbackToHeapWithDB(
 		return nil
 	}
 	tweets, err := client.GetMedias(ctx, user, utils.TimeRange{Begin: entity.LatestReleaseTime()})
-	if err == twitter.ErrWouldBlock {
+	if err == twitterclient.ErrWouldBlock {
 		safePushToHeap("client would block")
 		return nil
 	}
-	if v, ok := err.(*twitter.TwitterApiError); ok {
+	if v, ok := err.(*twitterclient.TwitterApiError); ok {
 		logger.WithField("user", entity.Name()).Warnf("twitter api error: %s", v.Error())
 		switch v.Code {
-		case twitter.ErrExceedPostLimit:
+		case twitterclient.ErrExceedPostLimit:
 			w.twitterClientManager.SetClientError(client, fmt.Errorf("reached the limit for seeing posts today"))
 			safePushToHeap("exceed post limit")
 			return nil
-		case twitter.ErrAccountLocked:
+		case twitterclient.ErrAccountLocked:
 			w.twitterClientManager.SetClientError(client, fmt.Errorf("account is locked"))
 			safePushToHeap("account locked")
 			return nil
@@ -192,7 +192,7 @@ tweetLoop:
 // saveTweetsToDatabase saves tweets to the database
 func (w *dbWorker) saveTweetsToDatabase(db *sqlx.DB, tweets []*twitterclient.Tweet, userId uint64, logger *log.Entry) {
 	for _, tweet := range tweets {
-		dbTweet := &database.Tweet{
+		dbTweet := &model.Tweet{
 			UserId:    userId,
 			TweetId:   tweet.Id,
 			Content:   tweet.Text,
@@ -320,7 +320,7 @@ func (w *dbWorker) downloadTweetMediaWithDB(
 
 	dbTweetId := dbTweet.Id
 	var urls []string
-	var mediaRecords []*database.Media
+	var mediaRecords []*model.Media
 	for i, url := range tweet.Urls {
 		// Extract filename from URL or use a generated name
 		fileName := filepath.Base(url)
@@ -341,7 +341,7 @@ func (w *dbWorker) downloadTweetMediaWithDB(
 
 		// Construct the full path where the media should be saved
 		mediaPath := filepath.Join(tweetDlMeta.GetPath(), fileName)
-		dbMedia := &database.Media{
+		dbMedia := &model.Media{
 			UserId:   tweet.Creator.TwitterId,
 			TweetId:  dbTweetId,
 			Location: mediaPath,

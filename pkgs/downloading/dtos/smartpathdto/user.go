@@ -7,11 +7,12 @@ import (
 	"time"
 
 	"github.com/WangWilly/xSync/pkgs/database"
+	"github.com/WangWilly/xSync/pkgs/model"
 	"github.com/jmoiron/sqlx"
 )
 
 type UserSmartPath struct {
-	Record     *database.UserEntity
+	Record     *model.UserEntity
 	db         *sqlx.DB
 	isSyncToDb bool
 }
@@ -24,7 +25,7 @@ func NewUserSmartPath(db *sqlx.DB, twitterId uint64, parentDir string) (*UserSma
 	}
 
 	if userEntity == nil {
-		userEntity = &database.UserEntity{}
+		userEntity = &model.UserEntity{}
 		userEntity.Uid = twitterId
 		userEntity.ParentDir = parentDir
 		created = false
@@ -33,7 +34,7 @@ func NewUserSmartPath(db *sqlx.DB, twitterId uint64, parentDir string) (*UserSma
 	return &UserSmartPath{Record: userEntity, db: db, isSyncToDb: created}, nil
 }
 
-func RebuildUserSmartPath(db *sqlx.DB, record *database.UserEntity) (*UserSmartPath, error) {
+func RebuildUserSmartPath(db *sqlx.DB, record *model.UserEntity) (*UserSmartPath, error) {
 	if record == nil {
 		return nil, fmt.Errorf("record is nil")
 	}

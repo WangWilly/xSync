@@ -8,6 +8,7 @@ import (
 	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
+	"github.com/WangWilly/xSync/pkgs/model"
 	"github.com/WangWilly/xSync/pkgs/tasks"
 	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/jmoiron/sqlx"
@@ -80,9 +81,9 @@ func syncList(db *sqlx.DB, list *twitterclient.List) error {
 		return err
 	}
 	if listdb == nil {
-		return database.CreateLst(db, &database.Lst{Id: list.Id, Name: list.Name, OwnerId: list.Creator.TwitterId})
+		return database.CreateLst(db, &model.List{Id: list.Id, Name: list.Name, OwnerId: list.Creator.TwitterId})
 	}
-	return database.UpdateLst(db, &database.Lst{Id: list.Id, Name: list.Name, OwnerId: list.Creator.TwitterId})
+	return database.UpdateLst(db, &model.List{Id: list.Id, Name: list.Name, OwnerId: list.Creator.TwitterId})
 }
 
 func syncLstAndGetMembers(ctx context.Context, client *twitterclient.Client, db *sqlx.DB, lst twitterclient.ListBase, dir string) ([]UserWithinListEntity, error) {

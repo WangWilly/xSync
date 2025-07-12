@@ -178,3 +178,14 @@ func (m *Manager) GetAvailableClientCount() int {
 	}
 	return count
 }
+
+func (m *Manager) GetApiCounts() map[string]int32 {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	counts := make(map[string]int32)
+	for _, apiCount := range m.apiCounts.Range() {
+		counts[apiCount.Key] = apiCount.Value.Load()
+	}
+	return counts
+}
