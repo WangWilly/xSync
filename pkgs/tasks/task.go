@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/WangWilly/xSync/pkgs/cli"
-	"github.com/WangWilly/xSync/pkgs/twitter"
-	"github.com/go-resty/resty/v2"
+	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
+	"github.com/WangWilly/xSync/pkgs/commandline"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -15,8 +14,8 @@ import (
 
 // Task represents a collection of users and lists to process
 type Task struct {
-	Users []*twitter.User
-	Lists []twitter.ListBase
+	Users []*twitterclient.User
+	Lists []twitterclient.ListBase
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -40,17 +39,17 @@ func PrintTask(task *Task) {
 }
 
 // MakeTask creates a new task from CLI arguments
-func MakeTask(ctx context.Context, client *resty.Client, usrArgs cli.UserArgs, listArgs cli.ListArgs, follArgs cli.UserArgs) (*Task, error) {
+func MakeTask(ctx context.Context, client *twitterclient.Client, usrArgs commandline.UserArgs, listArgs commandline.ListArgs, follArgs commandline.UserArgs) (*Task, error) {
 	task := Task{}
 
-	task.Users = make([]*twitter.User, 0)
+	task.Users = make([]*twitterclient.User, 0)
 	users, err := usrArgs.GetUser(ctx, client)
 	if err != nil {
 		return nil, err
 	}
 	task.Users = append(task.Users, users...)
 
-	task.Lists = make([]twitter.ListBase, 0)
+	task.Lists = make([]twitterclient.ListBase, 0)
 	lists, err := listArgs.GetList(ctx, client)
 	if err != nil {
 		return nil, err

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="250" height="200" viewBox="0 0 250 200">
+  <rect width="250" height="200" fill="#f8f9fa" stroke="#dee2e6" stroke-width="2" stroke-dasharray="5,5"/>
+  <text x="125" y="90" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6c757d">
+    📷 Media file
+  </text>
+  <text x="125" y="110" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6c757d">
+    not available
+  </text>
+</svg>

@@ -147,3 +147,11 @@ Twitter API 限制一段时间内过快的请求 （例如某端点每15分钟�
 ## 交流群
 
 tg: https://t.me/+I4yyM81HaJpkNTll
+
+## Project Structure
+
+> **Note**: This project has been restructured as a monorepo. See [README-MONOREPO.md](README-MONOREPO.md) for detailed information about the new structure and usage.
+
+- **CLI Application**: `cmd/cli/` - Command line interface
+- **Server Application**: `cmd/server/` - Web dashboard
+- **Quick Start**: Use `./scripts/build.sh` to build both applications

@@ -1,7 +1,6 @@
 package database
 
 import (
-	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/WangWilly/xSync/pkgs/model"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -29,12 +29,12 @@ func opentmpdb() *sqlx.DB {
 		panic(err)
 	}
 
-	CreateTables(db)
+	model.CreateTables(db)
 	return db
 }
 
-func generateUser(n int) *User {
-	usr := &User{}
+func generateUser(n int) *model.User {
+	usr := &model.User{}
 	usr.Id = uint64(n)
 	name := fmt.Sprintf("user%d", n)
 	usr.ScreenName = name
@@ -46,7 +46,7 @@ func TestUserOperation(t *testing.T) {
 	defer db.Close()
 
 	n := 100
-	users := make([]*User, n)
+	users := make([]*model.User, n)
 	for i := 0; i < n; i++ {
 		users[i] = generateUser(i)
 	}
@@ -56,7 +56,7 @@ func TestUserOperation(t *testing.T) {
 	}
 }
 
-func testUser(t *testing.T, usr *User) {
+func testUser(t *testing.T, usr *model.User) {
 	// create
 	if err := CreateUser(db, usr); err != nil {
 		t.Error(err)
@@ -112,13 +112,24 @@ func testUser(t *testing.T, usr *User) {
 	}
 }
 
-func hasSameUserRecord(usr *User) (bool, error) {
+func hasSameUserRecord(usr *model.User) (bool, error) {
 	retrieved, err := GetUserById(db, usr.Id)
-	return retrieved != nil && *retrieved == *usr, err
+	if err != nil {
+		return false, err
+	}
+	if retrieved == nil {
+		return false, nil
+	}
+	// Compare only the main fields, not the timestamps
+	return retrieved.Id == usr.Id &&
+		retrieved.ScreenName == usr.ScreenName &&
+		retrieved.Name == usr.Name &&
+		retrieved.IsProtected == usr.IsProtected &&
+		retrieved.FriendsCount == usr.FriendsCount, nil
 }
 
-func generateList(id int) *Lst {
-	lst := &Lst{}
+func generateList(id int) *model.List {
+	lst := &model.List{}
 	lst.Id = uint64(id)
 	lst.Name = fmt.Sprintf("lst%d", id)
 	return lst
@@ -128,7 +139,7 @@ func TestList(t *testing.T) {
 	db = opentmpdb()
 	defer db.Close()
 	n := 100
-	lsts := make([]*Lst, n)
+	lsts := make([]*model.List, n)
 	for i := 0; i < n; i++ {
 		lsts[i] = generateList(i)
 	}
@@ -184,16 +195,25 @@ func TestList(t *testing.T) {
 	}
 }
 
-func isSameLstRecord(lst *Lst) (bool, error) {
+func isSameLstRecord(lst *model.List) (bool, error) {
 	record, err := GetLst(db, lst.Id)
-	return record != nil && *record == *lst, err
+	if err != nil {
+		return false, err
+	}
+	if record == nil {
+		return false, nil
+	}
+	// Compare only the main fields, not the timestamps
+	return record.Id == lst.Id &&
+		record.Name == lst.Name &&
+		record.OwnerId == lst.OwnerId, nil
 }
 
 func TestUserEntity(t *testing.T) {
 	db = opentmpdb()
 	defer db.Close()
 	n := 100
-	entities := make([]*UserEntity, n)
+	entities := make([]*model.UserEntity, n)
 	tempDir := os.TempDir()
 	for i := 0; i < n; i++ {
 		entities[i] = generateUserEntity(uint64(i), tempDir)
@@ -249,7 +269,7 @@ func TestUserEntity(t *testing.T) {
 		entity.MediaCount.Scan(25)
 
 		// locate
-		record, err := GetUserEntity(db, entity.Uid, tempDir)
+		record, err := GetUserEntity(db, entity.Uid, entity.ParentDir)
 		if err != nil {
 			t.Error(err)
 			return
@@ -262,9 +282,12 @@ func TestUserEntity(t *testing.T) {
 		if !record.LatestReleaseTime.Time.Equal(now) {
 			t.Errorf("recorded latest release time: %v want %v", record.LatestReleaseTime.Time, now)
 		}
-		record.LatestReleaseTime = sql.NullTime{}
-		entity.LatestReleaseTime = sql.NullTime{}
-		if *record != *entity {
+		// Compare only the main fields, not the timestamps
+		if record.Id != entity.Id ||
+			record.Uid != entity.Uid ||
+			record.Name != entity.Name ||
+			record.ParentDir != entity.ParentDir ||
+			record.MediaCount != entity.MediaCount {
 			t.Error("record mismatch on locate user entity")
 			return
 		}
@@ -286,8 +309,8 @@ func TestUserEntity(t *testing.T) {
 	}
 }
 
-func generateUserEntity(uid uint64, pdir string) *UserEntity {
-	ue := UserEntity{}
+func generateUserEntity(uid uint64, pdir string) *model.UserEntity {
+	ue := model.UserEntity{}
 	user := generateUser(int(uid))
 	if err := CreateUser(db, user); err != nil {
 		panic(err)
@@ -299,9 +322,20 @@ func generateUserEntity(uid uint64, pdir string) *UserEntity {
 	return &ue
 }
 
-func hasSameUserEntityRecord(entity *UserEntity) (bool, error) {
+func hasSameUserEntityRecord(entity *model.UserEntity) (bool, error) {
 	record, err := GetUserEntityById(db, int(entity.Id.Int32))
-	return record != nil && *record == *entity, err
+	if err != nil {
+		return false, err
+	}
+	if record == nil {
+		return false, nil
+	}
+	// Compare only the main fields, not the timestamps
+	return record.Id == entity.Id &&
+		record.Uid == entity.Uid &&
+		record.Name == entity.Name &&
+		record.ParentDir == entity.ParentDir &&
+		record.MediaCount == entity.MediaCount, nil
 }
 
 func TestLstEntity(t *testing.T) {
@@ -309,7 +343,7 @@ func TestLstEntity(t *testing.T) {
 	defer db.Close()
 	tempdir := os.TempDir()
 	n := 100
-	entities := make([]*ListEntity, n)
+	entities := make([]*model.ListEntity, n)
 	for i := 0; i < n; i++ {
 		entities[i] = generateLstEntity(int64(i), tempdir)
 	}
@@ -359,7 +393,15 @@ func TestLstEntity(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		if record == nil || *record != *entity {
+		if record == nil {
+			t.Error("record mismatch after locate lst entity")
+			return
+		}
+		// Compare only the main fields, not the timestamps
+		if record.Id != entity.Id ||
+			record.LstId != entity.LstId ||
+			record.Name != entity.Name ||
+			record.ParentDir != entity.ParentDir {
 			t.Error("record mismatch after locate lst entity")
 			return
 		}
@@ -381,28 +423,38 @@ func TestLstEntity(t *testing.T) {
 	}
 }
 
-func generateLstEntity(lid int64, pdir string) *ListEntity {
+func generateLstEntity(lid int64, pdir string) *model.ListEntity {
 	lst := generateList(int(lid))
 	if err := CreateLst(db, lst); err != nil {
 		panic(err)
 	}
-	entity := ListEntity{}
+	entity := model.ListEntity{}
 	entity.LstId = lid
 	entity.ParentDir = pdir
 	entity.Name = lst.Name
 	return &entity
 }
 
-func hasSameLstEntityRecord(entity *ListEntity) (bool, error) {
+func hasSameLstEntityRecord(entity *model.ListEntity) (bool, error) {
 	record, err := GetListEntityById(db, int(entity.Id.Int32))
-	return record != nil && *record == *entity, err
+	if err != nil {
+		return false, err
+	}
+	if record == nil {
+		return false, nil
+	}
+	// Compare only the main fields, not the timestamps
+	return record.Id == entity.Id &&
+		record.LstId == entity.LstId &&
+		record.Name == entity.Name &&
+		record.ParentDir == entity.ParentDir, nil
 }
 
 func TestLink(t *testing.T) {
 	db = opentmpdb()
 	defer db.Close()
 	n := 100
-	links := make([]*UserLink, n)
+	links := make([]*model.UserLink, n)
 	for i := 0; i < n; i++ {
 		links[i] = generateLink(i, i)
 	}
@@ -447,7 +499,16 @@ func TestLink(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		if len(records) != 1 || *records[0] != *link {
+		if len(records) != 1 {
+			t.Error("mismatch record after get all user links")
+			return
+		}
+		// Compare only the main fields, not the timestamps
+		record := records[0]
+		if record.Id != link.Id ||
+			record.Uid != link.Uid ||
+			record.Name != link.Name ||
+			record.ParentLstEntityId != link.ParentLstEntityId {
 			t.Error("mismatch record after get all user links")
 			return
 		}
@@ -485,23 +546,33 @@ func TestLink(t *testing.T) {
 	}
 }
 
-func generateLink(uid int, lid int) *UserLink {
+func generateLink(uid int, lid int) *model.UserLink {
 	usr := generateUser(uid)
 	le := generateLstEntity(int64(lid), os.TempDir())
 	if err := CreateLstEntity(db, le); err != nil {
 		panic(err)
 	}
 
-	ul := UserLink{}
+	ul := model.UserLink{}
 	ul.Name = fmt.Sprintf("%d-%d", lid, uid)
 	ul.ParentLstEntityId = le.Id.Int32
 	ul.Uid = usr.Id
 	return &ul
 }
 
-func hasSameUserLinkRecord(link *UserLink) (bool, error) {
+func hasSameUserLinkRecord(link *model.UserLink) (bool, error) {
 	record, err := GetUserLink(db, link.Uid, link.ParentLstEntityId)
-	return record != nil && *record == *link, err
+	if err != nil {
+		return false, err
+	}
+	if record == nil {
+		return false, nil
+	}
+	// Compare only the main fields, not the timestamps
+	return record.Id == link.Id &&
+		record.Uid == link.Uid &&
+		record.Name == link.Name &&
+		record.ParentLstEntityId == link.ParentLstEntityId, nil
 }
 
 func benchmarkUpdateUser(b *testing.B, routines int) {
@@ -509,7 +580,7 @@ func benchmarkUpdateUser(b *testing.B, routines int) {
 	defer db.Close()
 
 	n := 500
-	users := make(chan *User, n)
+	users := make(chan *model.User, n)
 	for i := 0; i < n; i++ {
 		user := generateUser(i)
 		if err := CreateUser(db, user); err != nil {

@@ -6,30 +6,30 @@ import (
 	"io"
 	"os"
 
+	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
-	"github.com/WangWilly/xSync/pkgs/twitter"
 	"github.com/jmoiron/sqlx"
 )
 
 type TweetDumper struct {
-	data  map[int][]*twitter.Tweet
+	data  map[int][]*twitterclient.Tweet
 	set   map[int]map[uint64]struct{}
 	count int
 }
 
 func NewDumper() *TweetDumper {
 	td := TweetDumper{}
-	td.data = make(map[int][]*twitter.Tweet)
+	td.data = make(map[int][]*twitterclient.Tweet)
 	td.set = make(map[int]map[uint64]struct{})
 	return &td
 }
 
-func (td *TweetDumper) Push(eid int, tweet ...*twitter.Tweet) int {
+func (td *TweetDumper) Push(eid int, tweet ...*twitterclient.Tweet) int {
 	_, ok := td.data[eid]
 	if !ok {
-		td.data[eid] = make([]*twitter.Tweet, 0, len(tweet))
+		td.data[eid] = make([]*twitterclient.Tweet, 0, len(tweet))
 		td.set[eid] = make(map[uint64]struct{})
 	}
 
@@ -61,7 +61,7 @@ func (td *TweetDumper) Load(path string) error {
 	if err != nil {
 		return err
 	}
-	loaded := make(map[int][]*twitter.Tweet)
+	loaded := make(map[int][]*twitterclient.Tweet)
 	err = json.Unmarshal(data, &loaded)
 	if err != nil {
 		return err
@@ -82,13 +82,13 @@ func (td *TweetDumper) Dump(path string) error {
 }
 
 func (td *TweetDumper) Clear() {
-	td.data = make(map[int][]*twitter.Tweet)
+	td.data = make(map[int][]*twitterclient.Tweet)
 	td.set = make(map[int]map[uint64]struct{})
 	td.count = 0
 }
 
-func (td *TweetDumper) GetTotal(db *sqlx.DB) ([]*dldto.InEntity, error) {
-	results := make([]*dldto.InEntity, 0, td.count)
+func (td *TweetDumper) GetTotal(db *sqlx.DB) ([]*dldto.NewEntity, error) {
+	results := make([]*dldto.NewEntity, 0, td.count)
 
 	for k, v := range td.data {
 		e, err := database.GetUserEntityById(db, k)
@@ -98,14 +98,13 @@ func (td *TweetDumper) GetTotal(db *sqlx.DB) ([]*dldto.InEntity, error) {
 		if e == nil {
 			return nil, fmt.Errorf("entity %d is not exists", k)
 		}
-		// ue := smartpathdto.UserSmartPath{db: db, record: e, created: true}
 		ue, err := smartpathdto.RebuildUserSmartPath(db, e)
 		if err != nil {
 			return nil, err
 		}
 
 		for _, tw := range v {
-			results = append(results, &dldto.InEntity{Tweet: tw, Entity: ue})
+			results = append(results, &dldto.NewEntity{Tweet: tw, Entity: ue})
 		}
 	}
 	return results, nil
@@ -113,4 +112,22 @@ func (td *TweetDumper) GetTotal(db *sqlx.DB) ([]*dldto.InEntity, error) {
 
 func (td *TweetDumper) Count() int {
 	return td.count
+}
+
+// GetTweetsByEntityId returns tweets for a specific entity ID
+func (td *TweetDumper) GetTweetsByEntityId(entityId int) []*twitterclient.Tweet {
+	tweets, exists := td.data[entityId]
+	if !exists {
+		return nil
+	}
+	return tweets
+}
+
+// GetAllEntities returns all entity IDs that have tweets
+func (td *TweetDumper) GetAllEntities() []int {
+	var entities []int
+	for entityId := range td.data {
+		entities = append(entities, entityId)
+	}
+	return entities
 }
