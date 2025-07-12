@@ -268,6 +268,31 @@
             font-weight: 500;
         }
         
+        .user-actions {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .action-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #1da1f2 0%, #1991db 100%);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(29, 161, 242, 0.3);
+        }
+        
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(29, 161, 242, 0.4);
+            color: white;
+            text-decoration: none;
+        }
+        
         .loading {
             text-align: center;
             padding: 50px;
@@ -406,6 +431,12 @@
                             </div>
                         </div>
                         {{end}}
+                    </div>
+                    
+                    <div class="user-actions">
+                        <a href="/tweets-media/{{.User.Id}}" class="action-button">
+                            📱 View Tweets with Media
+                        </a>
                     </div>
                 </div>
                 {{end}}

@@ -79,7 +79,7 @@ func (r *Repo) GetWithMedia(db *sqlx.DB, userId uint64) ([]map[string]interface{
 		var tweet model.Tweet
 		var mediaLocation sql.NullString
 
-		err := rows.Scan(&tweet.Id, &tweet.UserId, &tweet.Content,
+		err := rows.Scan(&tweet.Id, &tweet.UserId, &tweet.TweetId, &tweet.Content,
 			&tweet.TweetTime, &tweet.CreatedAt, &tweet.UpdatedAt, &mediaLocation)
 		if err != nil {
 			return nil, err
@@ -87,6 +87,7 @@ func (r *Repo) GetWithMedia(db *sqlx.DB, userId uint64) ([]map[string]interface{
 
 		result := map[string]interface{}{
 			"id":         tweet.Id,
+			"tweet_id":   tweet.TweetId,
 			"content":    tweet.Content,
 			"tweet_time": tweet.TweetTime,
 			"created_at": tweet.CreatedAt,
