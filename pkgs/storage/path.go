@@ -27,9 +27,9 @@ func NewStorePath(root string) (*StorePath, error) {
 	ph := StorePath{}
 	ph.Root = root
 	ph.Users = filepath.Join(root, "users")
-	ph.Data = filepath.Join(root, ".data")
+	ph.Data = filepath.Join(root, "data")
 
-	ph.DB = filepath.Join(ph.Data, "foo.db")
+	ph.DB = filepath.Join(ph.Data, "xSync.db")
 	ph.ErrorJ = filepath.Join(ph.Data, "errors.json")
 
 	// ensure folders exist

@@ -13,6 +13,7 @@ import (
 
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading"
+	"github.com/WangWilly/xSync/pkgs/model"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -27,8 +28,8 @@ type Server struct {
 
 // UserStats represents user statistics for display
 type UserStats struct {
-	User           *database.User
-	Entities       []*database.UserEntity
+	User           *model.User
+	Entities       []*model.UserEntity
 	TotalMedias    int
 	LatestActivity time.Time
 }
@@ -53,16 +54,7 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath == "" {
-		// Try to find the database in the default location
-		homePath := os.Getenv("HOME")
-		if homePath == "" {
-			homePath = os.Getenv("APPDATA")
-		}
-		dbPath = filepath.Join(homePath, ".x_sync", "tmd.db")
-	}
+	dbPath := "./conf/data/xSync.db"
 
 	server, err := NewServer(dbPath, port)
 	if err != nil {
@@ -81,7 +73,7 @@ func main() {
 
 func NewServer(dbPath, port string) (*Server, error) {
 	// Connect to database
-	db, err := connectDatabase(dbPath)
+	db, err := database.ConnectDatabase(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
@@ -106,7 +98,7 @@ func NewServer(dbPath, port string) (*Server, error) {
 			}
 			return time.Since(t).Round(time.Minute).String() + " ago"
 		},
-	}).ParseGlob("templates/*.html")
+	}).ParseGlob("./cmd/server/templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse templates: %w", err)
 	}
@@ -414,23 +406,14 @@ func (s *Server) getDashboardData() (*DashboardData, error) {
 	}, nil
 }
 
-func (s *Server) getAllUsers() ([]*database.User, error) {
-	var users []*database.User
+func (s *Server) getAllUsers() ([]*model.User, error) {
+	var users []*model.User
 	err := s.db.Select(&users, "SELECT * FROM users ORDER BY screen_name")
 	return users, err
 }
 
-func (s *Server) getUserEntities(userID uint64) ([]*database.UserEntity, error) {
-	var entities []*database.UserEntity
+func (s *Server) getUserEntities(userID uint64) ([]*model.UserEntity, error) {
+	var entities []*model.UserEntity
 	err := s.db.Select(&entities, "SELECT * FROM user_entities WHERE user_id = ? ORDER BY name", userID)
 	return entities, err
-}
-
-func connectDatabase(path string) (*sqlx.DB, error) {
-	dsn := fmt.Sprintf("file:%s?_journal_mode=WAL&busy_timeout=2147483647", path)
-	db, err := sqlx.Connect("sqlite3", dsn)
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
 }
