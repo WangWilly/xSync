@@ -39,12 +39,12 @@ type UserEntity struct {
 }
 
 type UserLink struct {
-	Id                sql.NullInt32 `db:"id"`
-	Uid               uint64        `db:"user_id"`
-	Name              string        `db:"name"`
-	ParentLstEntityId int32         `db:"parent_lst_entity_id"`
-	CreatedAt         time.Time     `db:"created_at"`
-	UpdatedAt         time.Time     `db:"updated_at"`
+	Id                   sql.NullInt32 `db:"id"`
+	UserTwitterId        uint64        `db:"user_id"`
+	Name                 string        `db:"name"`
+	ListEntityIdBelongTo int32         `db:"parent_lst_entity_id"`
+	CreatedAt            time.Time     `db:"created_at"`
+	UpdatedAt            time.Time     `db:"updated_at"`
 }
 
 type List struct {
@@ -102,7 +102,7 @@ func (ul *UserLink) Path(db *sqlx.DB) (string, error) {
 	// In new code, use the repository pattern instead
 	stmt := `SELECT * FROM lst_entities WHERE id=?`
 	result := &ListEntity{}
-	err := db.Get(result, stmt, ul.ParentLstEntityId)
+	err := db.Get(result, stmt, ul.ListEntityIdBelongTo)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return "", fmt.Errorf("parent lst was not exists")

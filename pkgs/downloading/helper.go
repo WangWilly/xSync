@@ -4,10 +4,7 @@ import (
 	"context"
 	"runtime"
 
-	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
-	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
-	"github.com/WangWilly/xSync/pkgs/downloading/resolveworker"
 	"github.com/WangWilly/xSync/pkgs/workers"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
@@ -23,24 +20,24 @@ type Config struct {
 type helper struct {
 	cfg Config
 
-	twitterClientManager *twitterclient.Manager
-	heapHelper           HeapHelper
+	heapHelper HeapHelper
+	dbWorker   DbWorker
 }
 
-func NewDownloadHelperWithConfig(cfg Config, manager *twitterclient.Manager, heaphelper HeapHelper) *helper {
+func NewDownloadHelperWithConfig(cfg Config, heaphelper HeapHelper, dbWorker DbWorker) *helper {
 	defaultMaxDownloadRoutine := min(100, runtime.GOMAXPROCS(0)*10)
 	if cfg.MaxDownloadRoutine <= 0 {
 		cfg.MaxDownloadRoutine = defaultMaxDownloadRoutine
 	}
 
 	return &helper{
-		cfg:                  cfg,
-		twitterClientManager: manager,
-		heapHelper:           heaphelper,
+		cfg:        cfg,
+		heapHelper: heaphelper,
+		dbWorker:   dbWorker,
 	}
 }
 
-func (h *helper) BatchUserDownloadWithDB(ctx context.Context, db *sqlx.DB, users []heaphelper.UserWithinListEntity) ([]*dldto.NewEntity, error) {
+func (h *helper) BatchUserDownloadWithDB(ctx context.Context, db *sqlx.DB) ([]*dldto.NewEntity, error) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
@@ -49,28 +46,33 @@ func (h *helper) BatchUserDownloadWithDB(ctx context.Context, db *sqlx.DB, users
 
 	h.heapHelper.MakeHeap(ctx, db, h.cfg.DownloadDir, h.cfg.AutoFollow)
 
-	dbWorker := resolveworker.NewDBWorker(h.twitterClientManager)
 	simpleWorker := workers.NewSimpleWorker[*dldto.NewEntity](ctx, cancel, h.cfg.MaxDownloadRoutine)
-
 	producer := func(ctx context.Context, cancel context.CancelCauseFunc, output chan<- *dldto.NewEntity) ([]*dldto.NewEntity, error) {
-		return dbWorker.ProduceFromHeapToTweetChanWithDB(ctx, cancel, h.heapHelper, db, output, simpleWorker.IncrementProduced)
+		return h.dbWorker.ProduceFromHeapToTweetChanWithDB(ctx, cancel, h.heapHelper, db, output, simpleWorker.IncrementProduced)
 	}
 	consumer := func(ctx context.Context, cancel context.CancelCauseFunc, input <-chan *dldto.NewEntity) []*dldto.NewEntity {
-		return dbWorker.DownloadTweetMediaFromTweetChanWithDB(ctx, cancel, db, input, simpleWorker.IncrementConsumed)
+		return h.dbWorker.DownloadTweetMediaFromTweetChanWithDB(ctx, cancel, db, input, simpleWorker.IncrementConsumed)
 	}
 
 	result := simpleWorker.Process(producer, consumer, h.cfg.MaxDownloadRoutine)
-	logger.WithFields(log.Fields{
-		"produced": result.Stats.Produced,
-		"consumed": result.Stats.Consumed,
-		"failed":   result.Stats.Failed,
-		"duration": result.Stats.Duration,
-	}).Info("finished downloading tweets with database integration")
 
+	logger.
+		WithFields(
+			log.Fields{
+				"produced": result.Stats.Produced,
+				"consumed": result.Stats.Consumed,
+				"failed":   result.Stats.Failed,
+				"duration": result.Stats.Duration,
+			},
+		).
+		Info("finished downloading tweets with database integration")
 	if result.Error != nil {
-		logger.WithError(result.Error).Error("Producer error during tweet download with DB")
+		logger.
+			WithError(result.Error).
+			Error("Producer error during tweet download with DB")
 		return result.Failed, result.Error
 	}
+
 	return result.Failed, context.Cause(ctx)
 }
 
@@ -89,7 +91,6 @@ func (h *helper) BatchDownloadTweetWithDB(ctx context.Context, db *sqlx.DB, twee
 		WithField("count", len(tweetDlMetas)).
 		Info("starting batch tweet download with DB")
 
-	dbWorker := resolveworker.NewDBWorker(h.twitterClientManager)
 	simpleWorker := workers.NewSimpleWorker[*dldto.NewEntity](ctx, cancel, min(len(tweetDlMetas), h.cfg.MaxDownloadRoutine))
 
 	producer := func(ctx context.Context, cancel context.CancelCauseFunc, output chan<- *dldto.NewEntity) ([]*dldto.NewEntity, error) {
@@ -110,23 +111,31 @@ func (h *helper) BatchDownloadTweetWithDB(ctx context.Context, db *sqlx.DB, twee
 		return unsent, nil
 	}
 	consumer := func(ctx context.Context, cancel context.CancelCauseFunc, input <-chan *dldto.NewEntity) []*dldto.NewEntity {
-		return dbWorker.DownloadTweetMediaFromTweetChanWithDB(ctx, cancel, db, input, simpleWorker.IncrementConsumed)
+		return h.dbWorker.DownloadTweetMediaFromTweetChanWithDB(ctx, cancel, db, input, simpleWorker.IncrementConsumed)
 	}
 
 	result := simpleWorker.Process(producer, consumer, min(len(tweetDlMetas), h.cfg.MaxDownloadRoutine))
-	logger.WithFields(log.Fields{
-		"produced": result.Stats.Produced,
-		"consumed": result.Stats.Consumed,
-		"failed":   result.Stats.Failed,
-		"duration": result.Stats.Duration,
-	}).Info("completed with DB")
 
+	logger.
+		WithFields(
+			log.Fields{
+				"produced": result.Stats.Produced,
+				"consumed": result.Stats.Consumed,
+				"failed":   result.Stats.Failed,
+				"duration": result.Stats.Duration,
+			},
+		).
+		Info("completed with DB")
 	if result.Error != nil {
-		logger.WithError(result.Error).Error("Producer error during tweet download with DB")
+		logger.
+			WithError(result.Error).
+			Error("Producer error during tweet download with DB")
 	}
 	if len(result.Failed) > 0 {
-		logger.Warnf("failed to download %d tweets", len(result.Failed))
+		logger.
+			Warnf("failed to download %d tweets", len(result.Failed))
 		return result.Failed
 	}
+
 	return nil
 }

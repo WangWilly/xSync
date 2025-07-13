@@ -231,7 +231,7 @@ func testSyncUser(t *testing.T, name string, uid int, parentdir string, exist bo
 		t.Errorf("ue.created = false, want true")
 	}
 
-	if err := heaphelper.SyncPath(ue, name); err != nil {
+	if err := heaphelper.ExpectNameMustExistOnStorage(ue, name); err != nil {
 		t.Error(err)
 		return nil
 	}
@@ -263,7 +263,7 @@ func testSyncList(t *testing.T, name string, lid int, parentDir string, exist bo
 		t.Errorf("ue.created = false, want true")
 	}
 
-	if err := heaphelper.SyncPath(le, name); err != nil {
+	if err := heaphelper.ExpectNameMustExistOnStorage(le, name); err != nil {
 		t.Error(err)
 		return nil
 	}

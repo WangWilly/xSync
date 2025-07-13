@@ -461,7 +461,7 @@ func TestLink(t *testing.T) {
 
 	for _, link := range links {
 		// path
-		le, err := GetListEntityById(db, int(link.ParentLstEntityId))
+		le, err := GetListEntityById(db, int(link.ListEntityIdBelongTo))
 		if err != nil {
 			t.Error(err)
 			return
@@ -494,7 +494,7 @@ func TestLink(t *testing.T) {
 			return
 		}
 
-		records, err := GetUserLinks(db, link.Uid)
+		records, err := GetUserLinks(db, link.UserTwitterId)
 		if err != nil {
 			t.Error(err)
 			return
@@ -506,9 +506,9 @@ func TestLink(t *testing.T) {
 		// Compare only the main fields, not the timestamps
 		record := records[0]
 		if record.Id != link.Id ||
-			record.Uid != link.Uid ||
+			record.UserTwitterId != link.UserTwitterId ||
 			record.Name != link.Name ||
-			record.ParentLstEntityId != link.ParentLstEntityId {
+			record.ListEntityIdBelongTo != link.ListEntityIdBelongTo {
 			t.Error("mismatch record after get all user links")
 			return
 		}
@@ -555,13 +555,13 @@ func generateLink(uid int, lid int) *model.UserLink {
 
 	ul := model.UserLink{}
 	ul.Name = fmt.Sprintf("%d-%d", lid, uid)
-	ul.ParentLstEntityId = le.Id.Int32
-	ul.Uid = usr.Id
+	ul.ListEntityIdBelongTo = le.Id.Int32
+	ul.UserTwitterId = usr.Id
 	return &ul
 }
 
 func hasSameUserLinkRecord(link *model.UserLink) (bool, error) {
-	record, err := GetUserLink(db, link.Uid, link.ParentLstEntityId)
+	record, err := GetUserLink(db, link.UserTwitterId, link.ListEntityIdBelongTo)
 	if err != nil {
 		return false, err
 	}
@@ -570,9 +570,9 @@ func hasSameUserLinkRecord(link *model.UserLink) (bool, error) {
 	}
 	// Compare only the main fields, not the timestamps
 	return record.Id == link.Id &&
-		record.Uid == link.Uid &&
+		record.UserTwitterId == link.UserTwitterId &&
 		record.Name == link.Name &&
-		record.ParentLstEntityId == link.ParentLstEntityId, nil
+		record.ListEntityIdBelongTo == link.ListEntityIdBelongTo, nil
 }
 
 func benchmarkUpdateUser(b *testing.B, routines int) {

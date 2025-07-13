@@ -16,6 +16,7 @@ import (
 	"github.com/WangWilly/xSync/pkgs/downloading"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
+	"github.com/WangWilly/xSync/pkgs/downloading/resolveworker"
 	"github.com/WangWilly/xSync/pkgs/logging"
 	"github.com/WangWilly/xSync/pkgs/storage"
 	"github.com/WangWilly/xSync/pkgs/tasks"
@@ -199,17 +200,20 @@ func main() {
 	log.Infoln("start working for...")
 	tasks.PrintTask(task)
 
-	usersWithinListEntity, err := heaphelper.WrapToUsersWithinListEntity(ctx, client, db, task, pathHelper.Root)
-	if err != nil || len(usersWithinListEntity) == 0 {
-		log.Fatalln("failed to wrap users within list entity:", err)
+	heapHelperInstance, err := heaphelper.NewHelperFromTasks(ctx, client, db, task, pathHelper.Root, manager)
+	if err != nil {
+		log.Fatalln(err)
 	}
-	heapHelperInstance := heaphelper.NewHelper(usersWithinListEntity, manager)
-
-	downloadHelper := downloading.NewDownloadHelperWithConfig(downloading.Config{
-		MaxDownloadRoutine: conf.MaxDownloadRoutine,
-		DownloadDir:        pathHelper.Users,
-		AutoFollow:         autoFollow,
-	}, manager, heapHelperInstance)
+	dbWorker := resolveworker.NewDBWorker(manager)
+	downloadHelper := downloading.NewDownloadHelperWithConfig(
+		downloading.Config{
+			MaxDownloadRoutine: conf.MaxDownloadRoutine,
+			DownloadDir:        pathHelper.Users,
+			AutoFollow:         autoFollow,
+		},
+		heapHelperInstance,
+		dbWorker,
+	)
 
 	// retry failed tweets at exit
 	defer func() {
@@ -222,7 +226,7 @@ func main() {
 		}
 	}()
 
-	toDump, err = downloadHelper.BatchUserDownloadWithDB(ctx, db, usersWithinListEntity)
+	toDump, err = downloadHelper.BatchUserDownloadWithDB(ctx, db)
 	if err != nil {
 		log.Errorln("failed to download:", err)
 	}

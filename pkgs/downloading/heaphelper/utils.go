@@ -12,13 +12,12 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// TODO: make private
-// IsIngoreUser checks if a user should be ignored during processing
-func IsIngoreUser(user *twitterclient.User) bool {
+// isIngoreUser checks if a user should be ignored during processing
+func isIngoreUser(user *twitterclient.User) bool {
 	return user.Blocking || user.Muting
 }
 
-func SyncUserToDbAndGetSmartPath(db *sqlx.DB, user *twitterclient.User, dir string) (*smartpathdto.UserSmartPath, error) {
+func syncUserToDbAndGetSmartPath(db *sqlx.DB, user *twitterclient.User, dir string) (*smartpathdto.UserSmartPath, error) {
 	if err := syncTwitterUserToDb(db, user); err != nil {
 		return nil, err
 	}
@@ -28,10 +27,27 @@ func SyncUserToDbAndGetSmartPath(db *sqlx.DB, user *twitterclient.User, dir stri
 	if err != nil {
 		return nil, err
 	}
-	if err = SyncPath(userSmartPath, expectedFileName); err != nil {
+	if err = ExpectNameMustExistOnStorage(userSmartPath, expectedFileName); err != nil {
 		return nil, err
 	}
 	return userSmartPath, nil
+}
+
+func ExpectNameMustExistOnStorage(path smartpathdto.SmartPath, expectedName string) error {
+	if !path.IsSyncToDb() {
+		return path.Create(expectedName)
+	}
+
+	if path.Name() != expectedName {
+		return path.Rename(expectedName)
+	}
+
+	p, err := path.Path()
+	if err != nil {
+		return err
+	}
+
+	return os.MkdirAll(p, 0755)
 }
 
 // syncTwitterUserToDb updates the database record for a user
@@ -72,9 +88,8 @@ func syncTwitterUserToDb(db *sqlx.DB, twitterUser *twitterclient.User) error {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// TODO: make private
 
-func UpdateUserLink(lnk *model.UserLink, db *sqlx.DB, path string) error {
+func updateUserLink(lnk *model.UserLink, db *sqlx.DB, path string) error {
 	name := filepath.Base(path)
 
 	linkpath, err := lnk.Path(db)
@@ -112,9 +127,11 @@ func UpdateUserLink(lnk *model.UserLink, db *sqlx.DB, path string) error {
 	return nil
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 // calcUserDepth calculates how many timeline requests are needed to get all user tweets
 // 需要请求多少次时间线才能获取完毕用户的推文？
-func CalcUserDepth(exist int, total int) int {
+func calcUserDepth(exist int, total int) int {
 	if exist >= total {
 		return 1
 	}

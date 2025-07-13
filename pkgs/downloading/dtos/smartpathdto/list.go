@@ -31,42 +31,42 @@ func NewListSmartPath(db *sqlx.DB, lid int64, parentDir string) (*ListSmartPath,
 	return &ListSmartPath{record: record, db: db, Created: created}, nil
 }
 
-func (le *ListSmartPath) Create(name string) error {
-	le.record.Name = name
-	path, _ := le.Path()
+func (listsp *ListSmartPath) Create(name string) error {
+	listsp.record.Name = name
+	path, _ := listsp.Path()
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return nil
 	}
 
-	if err := database.CreateLstEntity(le.db, le.record); err != nil {
+	if err := database.CreateLstEntity(listsp.db, listsp.record); err != nil {
 		return err
 	}
-	le.Created = true
+	listsp.Created = true
 	return nil
 }
 
-func (le *ListSmartPath) Remove() error {
-	if !le.Created {
-		return fmt.Errorf("list entity [%s:%d] was not created", le.record.ParentDir, le.record.LstId)
+func (listsp *ListSmartPath) Remove() error {
+	if !listsp.Created {
+		return fmt.Errorf("list entity [%s:%d] was not created", listsp.record.ParentDir, listsp.record.LstId)
 	}
 
-	path, _ := le.Path()
+	path, _ := listsp.Path()
 	if err := os.RemoveAll(path); err != nil {
 		return err
 	}
-	if err := database.DelLstEntity(le.db, int(le.record.Id.Int32)); err != nil {
+	if err := database.DelLstEntity(listsp.db, int(listsp.record.Id.Int32)); err != nil {
 		return err
 	}
-	le.Created = false
+	listsp.Created = false
 	return nil
 }
 
-func (le *ListSmartPath) Rename(title string) error {
-	if !le.Created {
-		return fmt.Errorf("list entity [%s:%d] was not created", le.record.ParentDir, le.record.LstId)
+func (listsp *ListSmartPath) Rename(title string) error {
+	if !listsp.Created {
+		return fmt.Errorf("list entity [%s:%d] was not created", listsp.record.ParentDir, listsp.record.LstId)
 	}
 
-	path, _ := le.Path()
+	path, _ := listsp.Path()
 	newPath := filepath.Join(filepath.Dir(path), title)
 	err := os.Rename(path, newPath)
 	if os.IsNotExist(err) {
@@ -76,30 +76,30 @@ func (le *ListSmartPath) Rename(title string) error {
 		return err
 	}
 
-	le.record.Name = title
-	return database.UpdateLstEntity(le.db, le.record)
+	listsp.record.Name = title
+	return database.UpdateLstEntity(listsp.db, listsp.record)
 }
 
-func (le *ListSmartPath) Path() (string, error) {
-	return le.record.Path(), nil
+func (listsp *ListSmartPath) Path() (string, error) {
+	return listsp.record.Path(), nil
 }
 
-func (le ListSmartPath) Name() string {
-	if le.record.Name == "" {
-		panic(fmt.Sprintf("the name of list entity [%s:%d] was unset", le.record.ParentDir, le.record.LstId))
+func (listsp ListSmartPath) Name() string {
+	if listsp.record.Name == "" {
+		panic(fmt.Sprintf("the name of list entity [%s:%d] was unset", listsp.record.ParentDir, listsp.record.LstId))
 	}
 
-	return le.record.Name
+	return listsp.record.Name
 }
 
-func (le *ListSmartPath) Id() int {
-	if !le.Created {
-		panic(fmt.Sprintf("list entity [%s:%d] was not created", le.record.ParentDir, le.record.LstId))
+func (listsp *ListSmartPath) Id() int {
+	if !listsp.Created {
+		panic(fmt.Sprintf("list entity [%s:%d] was not created", listsp.record.ParentDir, listsp.record.LstId))
 	}
 
-	return int(le.record.Id.Int32)
+	return int(listsp.record.Id.Int32)
 }
 
-func (le *ListSmartPath) IsSyncToDb() bool {
-	return le.Created
+func (listsp *ListSmartPath) IsSyncToDb() bool {
+	return listsp.Created
 }
