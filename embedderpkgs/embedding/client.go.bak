@@ -1,0 +1,359 @@
+package embedding
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"strconv"
+	"time"
+
+	"github.com/go-redis/redis/v8"
+	chroma "github.com/amikos-tech/chroma-go"
+	"github.com/amikos-tech/chroma-go/types"
+)
+
+// Client provides ChromaDB integration for tweet embeddings
+type Client struct {
+	config     *Config
+	chromaDB   *chroma.Client
+	collection *chroma.Collection
+	redis      *redis.Client
+	ctx        context.Context
+}
+
+// NewClient creates a new embedding client
+func NewClient(config *Config) (*Client, error) {
+	if config == nil {
+		config = DefaultConfig()
+	}
+
+	ctx := context.Background()
+	client := &Client{
+		config: config,
+		ctx:    ctx,
+	}
+
+	// Initialize ChromaDB client
+	chromaClient, err := chroma.NewClient(config.ChromaDBURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ChromaDB client: %w", err)
+	}
+	client.chromaDB = chromaClient
+
+	// Setup authentication if token is provided
+	if config.ChromaDBToken != "" {
+		chromaClient.SetTenant("default_tenant")
+		chromaClient.SetDatabase("default_database")
+	}
+
+	// Create or get collection
+	collection, err := client.setupCollection()
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup collection: %w", err)
+	}
+	client.collection = collection
+
+	// Initialize Redis client if configured
+	if config.RedisURL != "" {
+		redisClient := redis.NewClient(&redis.Options{
+			Addr:     config.RedisURL,
+			Password: config.RedisPassword,
+			DB:       config.RedisDB,
+		})
+
+		// Test Redis connection
+		_, err := redisClient.Ping(ctx).Result()
+		if err != nil {
+			log.Printf("Warning: Redis connection failed: %v", err)
+		} else {
+			client.redis = redisClient
+		}
+	}
+
+	return client, nil
+}
+
+// setupCollection creates or gets the ChromaDB collection
+func (c *Client) setupCollection() (*chroma.Collection, error) {
+	// Check if collection exists
+	collections, err := c.chromaDB.ListCollections(c.ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list collections: %w", err)
+	}
+
+	for _, col := range collections {
+		if col.Name == c.config.CollectionName {
+			// Collection exists, get it
+			return c.chromaDB.GetCollection(c.ctx, c.config.CollectionName, nil)
+		}
+	}
+
+	// Collection doesn't exist, create it
+	metadata := map[string]interface{}{
+		"description":      "xSync tweet embeddings for web3 token analysis",
+		"embedding_model":  c.config.EmbeddingModel,
+		"embedding_dim":    c.config.EmbeddingDim,
+		"created_at":       time.Now().Format(time.RFC3339),
+		"version":          "1.0",
+	}
+
+	return c.chromaDB.CreateCollection(c.ctx, c.config.CollectionName, metadata, true, nil, types.L2)
+}
+
+// Close closes the client connections
+func (c *Client) Close() error {
+	if c.redis != nil {
+		return c.redis.Close()
+	}
+	return nil
+}
+
+// IndexTweet indexes a single tweet
+func (c *Client) IndexTweet(tweet *TweetEmbedding) error {
+	return c.IndexTweets([]*TweetEmbedding{tweet})
+}
+
+// IndexTweets indexes multiple tweets in batches
+func (c *Client) IndexTweets(tweets []*TweetEmbedding) error {
+	if len(tweets) == 0 {
+		return nil
+	}
+
+	// Process in batches
+	for i := 0; i < len(tweets); i += c.config.BatchSize {
+		end := i + c.config.BatchSize
+		if end > len(tweets) {
+			end = len(tweets)
+		}
+
+		batch := tweets[i:end]
+		if err := c.indexBatch(batch); err != nil {
+			return fmt.Errorf("failed to index batch %d-%d: %w", i, end, err)
+		}
+	}
+
+	return nil
+}
+
+// indexBatch indexes a batch of tweets
+func (c *Client) indexBatch(tweets []*TweetEmbedding) error {
+	var ids []string
+	var embeddings [][]float32
+	var metadatas []map[string]interface{}
+	var documents []string
+
+	for _, tweet := range tweets {
+		ids = append(ids, tweet.ID)
+		embeddings = append(embeddings, tweet.Embedding)
+		documents = append(documents, tweet.Content)
+
+		// Prepare metadata
+		metadata := map[string]interface{}{
+			"tweet_id":    strconv.FormatUint(tweet.TweetID, 10),
+			"user_id":     strconv.FormatUint(tweet.UserID, 10),
+			"user_name":   tweet.UserName,
+			"screen_name": tweet.ScreenName,
+			"tweet_time":  tweet.TweetTime.Format(time.RFC3339),
+			"created_at":  tweet.CreatedAt.Format(time.RFC3339),
+		}
+
+		// Add custom metadata
+		for k, v := range tweet.Metadata {
+			metadata[k] = v
+		}
+
+		metadatas = append(metadatas, metadata)
+	}
+
+	// Add to ChromaDB
+	_, err := c.collection.Add(c.ctx, embeddings, metadatas, documents, ids)
+	if err != nil {
+		return fmt.Errorf("failed to add embeddings to ChromaDB: %w", err)
+	}
+
+	// Cache in Redis if available
+	if c.redis != nil {
+		go c.cacheEmbeddings(tweets)
+	}
+
+	return nil
+}
+
+// cacheEmbeddings caches embeddings in Redis
+func (c *Client) cacheEmbeddings(tweets []*TweetEmbedding) {
+	for _, tweet := range tweets {
+		key := fmt.Sprintf("embedding:%s", tweet.ID)
+		data, err := json.Marshal(tweet)
+		if err != nil {
+			continue
+		}
+
+		c.redis.Set(c.ctx, key, data, c.config.CacheExpiration)
+	}
+}
+
+// Search performs semantic search for tweets
+func (c *Client) Search(query *SearchQuery) ([]*SearchResult, error) {
+	// Check cache first
+	if c.redis != nil {
+		if cached, err := c.getSearchCache(query); err == nil && len(cached) > 0 {
+			return cached, nil
+		}
+	}
+
+	// Prepare query filters
+	where := make(map[string]interface{})
+	
+	// User filters
+	if len(query.UserFilters) > 0 {
+		userIDs := make([]string, len(query.UserFilters))
+		for i, uid := range query.UserFilters {
+			userIDs[i] = strconv.FormatUint(uid, 10)
+		}
+		where["user_id"] = map[string]interface{}{"$in": userIDs}
+	}
+
+	// Date range filters
+	if query.DateRange != nil {
+		where["tweet_time"] = map[string]interface{}{
+			"$gte": query.DateRange.StartTime.Format(time.RFC3339),
+			"$lte": query.DateRange.EndTime.Format(time.RFC3339),
+		}
+	}
+
+	// Metadata filters
+	for k, v := range query.MetadataFilters {
+		where[k] = v
+	}
+
+	// Perform query
+	limit := query.Limit
+	if limit == 0 {
+		limit = 50
+	}
+
+	// Note: This is a simplified implementation
+	// In a real implementation, you would generate embeddings for the query
+	// and perform similarity search
+	queryResult, err := c.collection.Query(c.ctx, []string{query.Query}, int32(limit), where, nil, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query ChromaDB: %w", err)
+	}
+
+	// Convert results
+	results := make([]*SearchResult, len(queryResult.Documents[0]))
+	for i := range results {
+		var distance float32
+		if len(queryResult.Distances) > 0 && len(queryResult.Distances[0]) > i {
+			distance = queryResult.Distances[0][i]
+		}
+
+		score := 1.0 - distance // Convert distance to similarity score
+		if score < query.MinScore {
+			continue
+		}
+
+		// Parse metadata
+		metadata := queryResult.Metadatas[0][i]
+		tweetID, _ := strconv.ParseUint(metadata["tweet_id"].(string), 10, 64)
+		userID, _ := strconv.ParseUint(metadata["user_id"].(string), 10, 64)
+		tweetTime, _ := time.Parse(time.RFC3339, metadata["tweet_time"].(string))
+
+		tweet := &TweetEmbedding{
+			ID:         queryResult.Ids[0][i],
+			TweetID:    tweetID,
+			UserID:     userID,
+			Content:    queryResult.Documents[0][i],
+			UserName:   metadata["user_name"].(string),
+			ScreenName: metadata["screen_name"].(string),
+			TweetTime:  tweetTime,
+			Metadata:   metadata,
+		}
+
+		results[i] = &SearchResult{
+			Tweet:    tweet,
+			Score:    score,
+			Distance: distance,
+			Rank:     i + 1,
+		}
+	}
+
+	// Cache results
+	if c.redis != nil {
+		go c.cacheSearchResults(query, results)
+	}
+
+	return results, nil
+}
+
+// getSearchCache retrieves cached search results
+func (c *Client) getSearchCache(query *SearchQuery) ([]*SearchResult, error) {
+	key := fmt.Sprintf("search:%s:%d", query.Query, query.Limit)
+	data, err := c.redis.Get(c.ctx, key).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	var results []*SearchResult
+	if err := json.Unmarshal([]byte(data), &results); err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
+// cacheSearchResults caches search results
+func (c *Client) cacheSearchResults(query *SearchQuery, results []*SearchResult) {
+	key := fmt.Sprintf("search:%s:%d", query.Query, query.Limit)
+	data, err := json.Marshal(results)
+	if err != nil {
+		return
+	}
+
+	c.redis.Set(c.ctx, key, data, c.config.CacheExpiration)
+}
+
+// GetStats returns indexing statistics
+func (c *Client) GetStats() (*IndexStats, error) {
+	count, err := c.collection.Count(c.ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get collection count: %w", err)
+	}
+
+	return &IndexStats{
+		TotalTweets:    int64(count),
+		IndexedTweets:  int64(count),
+		FailedTweets:   0,
+		LastIndexedAt:  time.Now(),
+		CollectionSize: int64(count),
+		EmbeddingModel: c.config.EmbeddingModel,
+	}, nil
+}
+
+// DeleteTweet removes a tweet from the index
+func (c *Client) DeleteTweet(tweetID string) error {
+	err := c.collection.Delete(c.ctx, []string{tweetID}, nil, nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete tweet: %w", err)
+	}
+
+	// Remove from cache
+	if c.redis != nil {
+		key := fmt.Sprintf("embedding:%s", tweetID)
+		c.redis.Del(c.ctx, key)
+	}
+
+	return nil
+}
+
+// SearchTokenMentions searches for specific token mentions
+func (c *Client) SearchTokenMentions(tokenQuery string) ([]*SearchResult, error) {
+	query := &SearchQuery{
+		Query:    tokenQuery,
+		Limit:    100,
+		MinScore: c.config.SimilarityThreshold,
+	}
+
+	return c.Search(query)
+}
