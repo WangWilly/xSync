@@ -3,11 +3,11 @@ package downloading
 import (
 	"context"
 
-	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/twitterclient"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/utils"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
 	"github.com/WangWilly/xSync/pkgs/downloading/resolveworker"
-	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/jmoiron/sqlx"
 )
 

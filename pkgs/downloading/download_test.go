@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
-	"github.com/WangWilly/xSync/pkgs/database"
+	"github.com/WangWilly/xSync/pkgs/clipkg/database"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/twitterclient"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/utils"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
 	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
-	"github.com/WangWilly/xSync/pkgs/model"
-	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/jmoiron/sqlx"
 )
 

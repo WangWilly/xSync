@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/WangWilly/xSync/pkgs/server"
+	"github.com/WangWilly/xSync/pkgs/serverpkg/server"
 )
 
 func main() {

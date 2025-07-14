@@ -4,11 +4,11 @@ import (
 	"context"
 	"sync"
 
-	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
+	"github.com/WangWilly/xSync/pkgs/clipkg/tasks"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/twitterclient"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/utils"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
-	"github.com/WangWilly/xSync/pkgs/model"
-	"github.com/WangWilly/xSync/pkgs/tasks"
-	"github.com/WangWilly/xSync/pkgs/utils"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 )

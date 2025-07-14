@@ -3,7 +3,7 @@ package heaphelper
 import (
 	"time"
 
-	"github.com/WangWilly/xSync/pkgs/model"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/jmoiron/sqlx"
 )
 

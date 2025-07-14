@@ -9,17 +9,17 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
-	"github.com/WangWilly/xSync/pkgs/commandline"
-	"github.com/WangWilly/xSync/pkgs/config"
-	"github.com/WangWilly/xSync/pkgs/database"
+	"github.com/WangWilly/xSync/pkgs/clipkg/commandline"
+	"github.com/WangWilly/xSync/pkgs/clipkg/config"
+	"github.com/WangWilly/xSync/pkgs/clipkg/tasks"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/twitterclient"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/database"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/logging"
 	"github.com/WangWilly/xSync/pkgs/downloading"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
 	"github.com/WangWilly/xSync/pkgs/downloading/resolveworker"
-	"github.com/WangWilly/xSync/pkgs/logging"
 	"github.com/WangWilly/xSync/pkgs/storage"
-	"github.com/WangWilly/xSync/pkgs/tasks"
 	"github.com/gookit/color"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
@@ -166,9 +166,9 @@ func main() {
 	}
 	defer clientLogFile.Close()
 
-	logging.SetTwitterClientLogger(client, clientLogFile)
+	twitterclient.SetTwitterClientLogger(client, clientLogFile)
 	for _, client := range addtionalClients {
-		logging.SetTwitterClientLogger(client, clientLogFile)
+		twitterclient.SetTwitterClientLogger(client, clientLogFile)
 	}
 
 	// Twitter Client Manager Setup

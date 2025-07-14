@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/WangWilly/xSync/pkgs/database"
-	"github.com/WangWilly/xSync/pkgs/model"
+	"github.com/WangWilly/xSync/pkgs/clipkg/database"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/jmoiron/sqlx"
 )
 

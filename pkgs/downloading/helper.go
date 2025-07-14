@@ -4,8 +4,8 @@ import (
 	"context"
 	"runtime"
 
+	"github.com/WangWilly/xSync/pkgs/clipkg/workers"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
-	"github.com/WangWilly/xSync/pkgs/workers"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 )

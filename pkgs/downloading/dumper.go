@@ -6,8 +6,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
-	"github.com/WangWilly/xSync/pkgs/database"
+	"github.com/WangWilly/xSync/pkgs/clipkg/database"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
 	"github.com/jmoiron/sqlx"

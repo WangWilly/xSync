@@ -1,7 +1,7 @@
 package dldto
 
 import (
-	"github.com/WangWilly/xSync/pkgs/clients/twitterclient"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
 )
 
