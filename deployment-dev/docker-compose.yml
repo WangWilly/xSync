@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: xsync-chromadb
+    ports:
+      - "8000:8000"
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+      - CHROMA_SERVER_CORS_ALLOW_ORIGINS=["*"]
+      - CHROMA_SERVER_AUTH_CREDENTIALS_PROVIDER=chromadb.auth.token_authn.TokenAuthenticationServerProvider
+      - CHROMA_SERVER_AUTH_TOKEN_TRANSPORT_HEADER=X-Chroma-Token
+      - CHROMA_AUTH_TOKEN_SECRET=xsync-dev-token-2025
+    volumes:
+      - chroma_data:/chroma/chroma
+      - ./chroma_config:/chroma/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - xsync-network
+
+  # Redis for caching embeddings and search results (optional but recommended)
+  redis:
+    image: redis:7-alpine
+    container_name: xsync-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass xsync-redis-2025
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "xsync-redis-2025", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - xsync-network
+
+  # Embedding API service with SentenceTransformers
+  embedding-api:
+    build:
+      context: ../services/embedding-api
+      dockerfile: Dockerfile
+    container_name: xsync-embedding-api
+    ports:
+      - "8001:8001"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8001
+      - WORKERS=1
+      - EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+      - CROSS_ENCODER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
+    volumes:
+      - embedding_models:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s  # Models take time to load
+    restart: unless-stopped
+    networks:
+      - xsync-network
+    depends_on:
+      - chromadb
+
+volumes:
+  chroma_data:
+    driver: local
+  redis_data:
+    driver: local
+  embedding_models:
+    driver: local
+
+networks:
+  xsync-network:
+    driver: bridge

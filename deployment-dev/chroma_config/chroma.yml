@@ -1,0 +1,26 @@
+# ChromaDB Configuration for xSync Development
+
+# Server Settings
+chroma_server_host: "0.0.0.0"
+chroma_server_http_port: 8000
+chroma_server_cors_allow_origins: ["*"]
+
+# Authentication (for development)
+chroma_server_auth_credentials_provider: "chromadb.auth.token_authn.TokenAuthenticationServerProvider"
+chroma_server_auth_token_transport_header: "X-Chroma-Token"
+
+# Logging
+chroma_logfile: "/chroma/logs/chroma.log"
+chroma_log_level: "INFO"
+
+# Database
+chroma_db_impl: "duckdb+parquet"
+chroma_persist_directory: "/chroma/chroma"
+
+# Performance
+chroma_segment_cache_policy: "LRU"
+chroma_segment_cache_size: 1000
+
+# Collection Settings
+chroma_collection_embedding_dimension: 384  # For sentence-transformers models
+chroma_collection_distance_function: "cosine"
