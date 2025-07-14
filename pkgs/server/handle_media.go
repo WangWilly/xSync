@@ -23,7 +23,7 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get media from database
-	medias, err := s.getMediasByUserID(id)
+	medias, err := s.mediaRepo.GetByUserId(s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get media: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -34,7 +34,7 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
 		media.Location = s.convertToRelativePath(media.Location)
 	}
 
-	user, err := s.getUserByID(id)
+	user, err := s.userRepo.GetById(s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get user: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -69,7 +69,7 @@ func (s *Server) handleAPIMedia(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get media from database
-	medias, err := s.getMediasByUserID(id)
+	medias, err := s.mediaRepo.GetByUserId(s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get media: "+err.Error(), http.StatusInternalServerError)
 		return

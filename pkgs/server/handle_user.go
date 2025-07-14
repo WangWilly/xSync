@@ -22,7 +22,7 @@ func (s *Server) handleUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.getUserByID(id)
+	user, err := s.userRepo.GetById(s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get user: "+err.Error(), http.StatusInternalServerError)
 		return

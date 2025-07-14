@@ -3,7 +3,6 @@ package server
 import (
 	"strings"
 
-	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/model"
 )
 
@@ -44,19 +43,4 @@ func (s *Server) convertToRelativePath(absolutePath string) string {
 	// Extract the relative path after "conf/users/"
 	relativePath := absolutePath[usersIndex+len("conf/users/"):]
 	return relativePath
-}
-
-// getUserByID retrieves a user by ID with error handling
-func (s *Server) getUserByID(id uint64) (*model.User, error) {
-	return database.GetUserById(s.db, id)
-}
-
-// getMediasByUserID retrieves all media for a user
-func (s *Server) getMediasByUserID(userID uint64) ([]*model.Media, error) {
-	return database.GetMediasByUserId(s.db, userID)
-}
-
-// getTweetsWithMedia retrieves tweets with associated media for a user
-func (s *Server) getTweetsWithMedia(userID uint64) ([]map[string]interface{}, error) {
-	return database.GetTweetsWithMedia(s.db, userID)
 }

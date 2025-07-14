@@ -37,7 +37,7 @@ func (s *Server) handleTweets(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	user, err := s.getUserByID(uint64(id))
+	user, err := s.userRepo.GetById(s.db, uint64(id))
 	if err != nil {
 		http.Error(w, "Failed to get user: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -72,7 +72,7 @@ func (s *Server) handleAPITweets(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get tweets with media from database
-	tweetsWithMedia, err := s.getTweetsWithMedia(id)
+	tweetsWithMedia, err := s.tweetRepo.GetWithMedia(s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get tweets: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -97,7 +97,7 @@ func (s *Server) handleTweetsWithMedia(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get user info
-	user, err := s.getUserByID(id)
+	user, err := s.userRepo.GetById(s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get user: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -109,7 +109,7 @@ func (s *Server) handleTweetsWithMedia(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get tweets with media
-	tweetsWithMedia, err := s.getTweetsWithMedia(id)
+	tweetsWithMedia, err := s.tweetRepo.GetWithMedia(s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get tweets with media: "+err.Error(), http.StatusInternalServerError)
 		return

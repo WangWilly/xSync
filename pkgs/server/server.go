@@ -8,6 +8,9 @@ import (
 
 	"github.com/WangWilly/xSync/pkgs/database"
 	"github.com/WangWilly/xSync/pkgs/downloading"
+	"github.com/WangWilly/xSync/pkgs/repos/mediarepo"
+	"github.com/WangWilly/xSync/pkgs/repos/tweetrepo"
+	"github.com/WangWilly/xSync/pkgs/repos/userrepo"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -18,6 +21,10 @@ type Server struct {
 	dumper    *downloading.TweetDumper
 	templates *template.Template
 	port      string
+
+	userRepo  UserRepo
+	mediaRepo MediaRepo
+	tweetRepo TweetRepo
 }
 
 // NewServer creates a new server instance
@@ -49,6 +56,10 @@ func NewServer(dbPath, port string) (*Server, error) {
 		dumper:    dumper,
 		templates: templates,
 		port:      port,
+
+		userRepo:  userrepo.New(),
+		mediaRepo: mediarepo.New(),
+		tweetRepo: tweetrepo.New(),
 	}, nil
 }
 
@@ -86,19 +97,4 @@ func (s *Server) setupRoutes() {
 	// Static file routes
 	http.HandleFunc("/static/", s.handleStatic)
 	http.HandleFunc("/files/", s.handleFiles)
-}
-
-// GetDB returns the database connection
-func (s *Server) GetDB() *sqlx.DB {
-	return s.db
-}
-
-// GetDumper returns the tweet dumper
-func (s *Server) GetDumper() *downloading.TweetDumper {
-	return s.dumper
-}
-
-// GetTemplates returns the templates
-func (s *Server) GetTemplates() *template.Template {
-	return s.templates
 }
