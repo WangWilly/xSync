@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -8,12 +9,14 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
+
 	// Create a new Jupiter client
 	client := juptokenclient.New()
 
 	// Test 1: Get a specific token first (faster)
 	fmt.Println("=== Testing with specific token (SOL) ===")
-	solToken, err := client.GetTokenByAddress("So11111111111111111111111111111111111111112")
+	solToken, err := client.GetTokenByAddress(ctx, "So11111111111111111111111111111111111111112")
 	if err != nil {
 		log.Fatalf("Error getting SOL token: %v", err)
 	}
@@ -27,7 +30,7 @@ func main() {
 
 	// Test 2: Get verified tokens (smaller subset)
 	fmt.Println("\n=== Testing with verified tokens ===")
-	verifiedTokens, err := client.GetVerifiedTokens()
+	verifiedTokens, err := client.GetVerifiedTokens(ctx)
 	if err != nil {
 		log.Fatalf("Error getting verified tokens: %v", err)
 	}
@@ -43,7 +46,7 @@ func main() {
 
 	// Test 3: Try to get all tokens (this might be slow)
 	fmt.Println("\n=== Testing with all tokens (this may take a moment) ===")
-	allTokens, err := client.GetAllTokens()
+	allTokens, err := client.GetAllTokens(ctx)
 	if err != nil {
 		log.Fatalf("Error getting all tokens: %v", err)
 	}
@@ -51,7 +54,7 @@ func main() {
 
 	// Test 4: Search functionality
 	fmt.Println("\n=== Testing search functionality ===")
-	usdTokens, err := client.SearchTokensBySymbol("USDC")
+	usdTokens, err := client.SearchTokensBySymbol(ctx, "USDC")
 	if err != nil {
 		log.Fatalf("Error searching tokens by symbol: %v", err)
 	}

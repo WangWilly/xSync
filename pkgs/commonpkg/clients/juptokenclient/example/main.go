@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -8,12 +9,14 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
+
 	// Create a new Jupiter client
 	client := juptokenclient.New()
 
 	// Example 1: Get all tokens
 	fmt.Println("=== Getting all tokens ===")
-	allTokens, err := client.GetAllTokens()
+	allTokens, err := client.GetAllTokens(ctx)
 	if err != nil {
 		log.Fatalf("Error getting all tokens: %v", err)
 	}
@@ -29,7 +32,7 @@ func main() {
 
 	// Example 2: Get verified tokens only
 	fmt.Println("\n=== Getting verified tokens ===")
-	verifiedTokens, err := client.GetVerifiedTokens()
+	verifiedTokens, err := client.GetVerifiedTokens(ctx)
 	if err != nil {
 		log.Fatalf("Error getting verified tokens: %v", err)
 	}
@@ -37,7 +40,7 @@ func main() {
 
 	// Example 3: Get tokens by specific tags
 	fmt.Println("\n=== Getting tokens by tags (verified, community) ===")
-	taggedTokens, err := client.GetTokensByTags([]string{"verified", "community"})
+	taggedTokens, err := client.GetTokensByTags(ctx, []string{"verified", "community"})
 	if err != nil {
 		log.Fatalf("Error getting tokens by tags: %v", err)
 	}
@@ -45,7 +48,7 @@ func main() {
 
 	// Example 4: Get a specific token by address (SOL)
 	fmt.Println("\n=== Getting specific token (SOL) ===")
-	solToken, err := client.GetTokenByAddress("So11111111111111111111111111111111111111112")
+	solToken, err := client.GetTokenByAddress(ctx, "So11111111111111111111111111111111111111112")
 	if err != nil {
 		log.Fatalf("Error getting SOL token: %v", err)
 	}
@@ -59,7 +62,7 @@ func main() {
 
 	// Example 5: Search tokens by symbol
 	fmt.Println("\n=== Searching tokens by symbol (USD) ===")
-	usdTokens, err := client.SearchTokensBySymbol("USD")
+	usdTokens, err := client.SearchTokensBySymbol(ctx, "USD")
 	if err != nil {
 		log.Fatalf("Error searching tokens by symbol: %v", err)
 	}
@@ -73,7 +76,7 @@ func main() {
 
 	// Example 6: Search tokens by name
 	fmt.Println("\n=== Searching tokens by name (Bitcoin) ===")
-	bitcoinTokens, err := client.SearchTokensByName("Bitcoin")
+	bitcoinTokens, err := client.SearchTokensByName(ctx, "Bitcoin")
 	if err != nil {
 		log.Fatalf("Error searching tokens by name: %v", err)
 	}
@@ -84,7 +87,7 @@ func main() {
 
 	// Example 7: Get token statistics
 	fmt.Println("\n=== Token Statistics ===")
-	stats, err := client.GetTokenStats()
+	stats, err := client.GetTokenStats(ctx)
 	if err != nil {
 		log.Fatalf("Error getting token stats: %v", err)
 	}
@@ -100,7 +103,7 @@ func main() {
 
 	// Example 8: Get tradable tokens
 	fmt.Println("\n=== Getting tradable tokens ===")
-	tradableTokens, err := client.GetTradableTokens()
+	tradableTokens, err := client.GetTradableTokens(ctx)
 	if err != nil {
 		log.Fatalf("Error getting tradable tokens: %v", err)
 	}

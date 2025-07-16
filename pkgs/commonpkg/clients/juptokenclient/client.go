@@ -12,19 +12,19 @@ const BASE_URL = "https://tokens.jup.ag"
 
 ////////////////////////////////////////////////////////////////////////////////
 
-type Client struct {
+type client struct {
 	restyClient *resty.Client
 }
 
-func New() *Client {
-	client := resty.New()
-	client.SetBaseURL(BASE_URL)
-	client.SetHeader("User-Agent", "xSync/1.0")
-	client.SetTimeout(60 * time.Second)
-	client.SetRetryCount(3)
-	client.SetRetryWaitTime(1 * time.Second)
+func New() *client {
+	restyClient := resty.New()
+	restyClient.SetBaseURL(BASE_URL)
+	restyClient.SetHeader("User-Agent", "xSync/1.0")
+	restyClient.SetTimeout(60 * time.Second)
+	restyClient.SetRetryCount(3)
+	restyClient.SetRetryWaitTime(1 * time.Second)
 
-	return &Client{
-		restyClient: client,
+	return &client{
+		restyClient: restyClient,
 	}
 }
