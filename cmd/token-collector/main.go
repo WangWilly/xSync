@@ -64,6 +64,7 @@ func main() {
 	tokenRepo := tokenrepo.New()
 	tokenEmbeddingRepo := tokenembedding.New()
 	tokenService := services.NewTokenService(
+		services.Config{},
 		db,
 		jupiterClient,
 		chromaTokenClient,

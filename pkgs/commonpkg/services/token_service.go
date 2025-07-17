@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"time"
 
 	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/juptokenclient"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
@@ -12,9 +11,15 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type Config struct {
+	batchSizeForSqlDb  int
+	batchSizeForChroma int
+}
+
 // TokenService orchestrates token collection from Jupiter API to PostgreSQL to ChromaDB
 type TokenService struct {
-	db *sqlx.DB
+	cfg Config
+	db  *sqlx.DB
 
 	jupiterClient      JupTokenClient
 	chromaClient       ChromaTokenClient
@@ -25,13 +30,22 @@ type TokenService struct {
 
 // NewTokenService creates a new token service
 func NewTokenService(
+	cfg Config,
 	db *sqlx.DB,
 	jupiterClient JupTokenClient,
 	chromaClient ChromaTokenClient,
 	tokenRepo TokenRepo,
 	tokenEmbeddingRepo TokenEmbeddingRepo,
 ) *TokenService {
+	if cfg.batchSizeForSqlDb <= 0 {
+		cfg.batchSizeForSqlDb = 1000
+	}
+	if cfg.batchSizeForChroma <= 0 {
+		cfg.batchSizeForChroma = 1000
+	}
+
 	return &TokenService{
+		cfg:                cfg,
 		db:                 db,
 		jupiterClient:      jupiterClient,
 		chromaClient:       chromaClient,
@@ -55,7 +69,7 @@ func (s *TokenService) CollectAndStoreTokens(ctx context.Context) error {
 
 	s.logger.Info("Saving tokens to PostgreSQL...")
 	savedCount := 0
-	for tokenBatch := range slices.Chunk(tokens, 100) {
+	for tokenBatch := range slices.Chunk(tokens, s.cfg.batchSizeForSqlDb) {
 		// Save token directly as it's already in the correct format
 		_, err := s.tokenRepo.BatchUpsertFromJupTokenDto(ctx, s.db, tokenBatch)
 		if err != nil {
@@ -78,11 +92,9 @@ func (s *TokenService) CollectAndStoreTokens(ctx context.Context) error {
 
 // processTokensForChroma processes tokens that haven't been embedded in ChromaDB yet
 func (s *TokenService) processTokensForChroma(ctx context.Context) error {
-	batchSize := 50 // Process in batches to avoid overwhelming the system
-
 	for {
 		// Get tokens not yet in ChromaDB
-		tokens, err := s.tokenRepo.ListByNotInChroma(ctx, s.db, batchSize)
+		tokens, err := s.tokenRepo.ListByNotInChroma(ctx, s.db, s.cfg.batchSizeForChroma)
 		if err != nil {
 			return fmt.Errorf("failed to get tokens not in chroma: %w", err)
 		}
@@ -93,43 +105,6 @@ func (s *TokenService) processTokensForChroma(ctx context.Context) error {
 		}
 
 		s.logger.Infof("Processing %d tokens for ChromaDB", len(tokens))
-
-		// // Process each token
-		// for _, token := range tokens {
-		// 	// Convert model.Token to juptokenclient.JupTokenDto for ChromaDB client
-		// 	tokenInfo := &juptokenclient.JupTokenDto{
-		// 		Address:  token.Address,
-		// 		Decimals: token.Decimals,
-		// 		Name:     token.Name,
-		// 		Symbol:   token.Symbol,
-		// 		LogoURI:  token.LogoURI,
-		// 		Tags:     parseTagsFromJSON(token.Tags),
-		// 	}
-
-		// 	// Add to ChromaDB
-		// 	chromaDocID, err := s.chromaClient.CreateTokenFromJupiter(ctx, tokenInfo)
-		// 	if err != nil {
-		// 		s.logger.WithError(err).Warnf("Failed to add token %s to ChromaDB", token.Address)
-		// 		continue
-		// 	}
-
-		// 	// Mark as embedded in PostgreSQL
-		// 	err = s.tokenRepo.MarkTokenAsEmbedded(ctx, s.db, token.Address, chromaDocID)
-		// 	if err != nil {
-		// 		s.logger.WithError(err).Warnf("Failed to mark token %s as embedded", token.Address)
-		// 		continue
-		// 	}
-
-		// 	// Save embedding record
-
-		// 	err = s.tokenEmbeddingRepo.Upsert(ctx, s.db, token.Address, chromaDocID, embeddingContent)
-		// 	if err != nil {
-		// 		s.logger.WithError(err).Warnf("Failed to save embedding record for token %s", token.Address)
-		// 	}
-		// }
-
-		// Add small delay between batches
-		defer time.Sleep(100 * time.Millisecond)
 
 		tokenInfos := juptokenclient.BatchNewJupTokenDtoFromModel(tokens)
 		chromaDocIDs, err := s.chromaClient.BatchCreateTokensFromJupiter(ctx, tokenInfos)
@@ -195,12 +170,11 @@ func (s *TokenService) SearchTokens(ctx context.Context, query string, useChroma
 			return nil, fmt.Errorf("failed to search tokens in chroma: %w", err)
 		}
 		return results, nil
-	} else {
-		// Use PostgreSQL for exact search
-		results, err := s.tokenRepo.SearchTokens(ctx, s.db, query, 10)
-		if err != nil {
-			return nil, fmt.Errorf("failed to search tokens in postgres: %w", err)
-		}
-		return results, nil
 	}
+
+	results, err := s.tokenRepo.SearchTokens(ctx, s.db, query, 10)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search tokens in postgres: %w", err)
+	}
+	return results, nil
 }
