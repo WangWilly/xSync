@@ -45,12 +45,10 @@ func (w *dbWorker) ProduceFromHeapToTweetChanWithDB(
 ) ([]*dldto.NewEntity, error) {
 	logger := log.WithField("function", "ProduceFromHeapWithDB")
 
-	var unsentTweets []*dldto.NewEntity
-
 	heap := heapHelper.GetHeap()
 	logger.WithField("worker", "producer").Infof("initial heap size: %d", heap.Size())
 
-	// Process users from heap sequentially
+	var unsentTweets []*dldto.NewEntity
 	for !heap.Empty() && ctx.Err() == nil {
 		entity := heap.Peek()
 		heap.Pop()

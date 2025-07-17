@@ -42,16 +42,7 @@ func (h *helper) getUsersWithinListEntity(
 		userList = append(
 			userList,
 			UserWithinListEntity{
-				User: &twitterclient.User{
-					TwitterId:   twitterClientUser.TwitterId,
-					Name:        twitterClientUser.Name,
-					ScreenName:  twitterClientUser.ScreenName,
-					IsProtected: twitterClientUser.IsProtected,
-					Followstate: twitterclient.FollowState(twitterClientUser.Followstate),
-					MediaCount:  twitterClientUser.MediaCount,
-					Muting:      twitterClientUser.Muting,
-					Blocking:    twitterClientUser.Blocking,
-				},
+				User:        twitterClientUser,
 				MaybeListId: nil,
 			},
 		)
@@ -238,16 +229,7 @@ func (h *helper) getMembersFromList(
 		packedUsers = append(
 			packedUsers,
 			UserWithinListEntity{
-				User: &twitterclient.User{
-					TwitterId:   user.TwitterId,
-					Name:        user.Name,
-					ScreenName:  user.ScreenName,
-					IsProtected: user.IsProtected,
-					Followstate: twitterclient.FollowState(user.Followstate),
-					MediaCount:  user.MediaCount,
-					Muting:      user.Muting,
-					Blocking:    user.Blocking,
-				},
+				User:        user,
 				MaybeListId: &eid,
 			},
 		)

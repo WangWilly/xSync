@@ -49,23 +49,23 @@ func MakeTask(ctx context.Context, client *twitterclient.Client, usrArgs command
 	}
 	task.Users = append(task.Users, users...)
 
-	task.Lists = make([]twitterclient.ListBase, 0)
-	lists, err := listArgs.GetList(ctx, client)
-	if err != nil {
-		return nil, err
-	}
-	for _, list := range lists {
-		task.Lists = append(task.Lists, list)
-	}
+	// task.Lists = make([]twitterclient.ListBase, 0)
+	// lists, err := listArgs.GetList(ctx, client)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// for _, list := range lists {
+	// 	task.Lists = append(task.Lists, list)
+	// }
 
-	// followers
-	users, err = follArgs.GetUser(ctx, client)
-	if err != nil {
-		return nil, err
-	}
-	for _, user := range users {
-		task.Lists = append(task.Lists, user.Following())
-	}
+	// // followers
+	// users, err = follArgs.GetUser(ctx, client)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// for _, user := range users {
+	// 	task.Lists = append(task.Lists, user.Following())
+	// }
 
 	return &task, nil
 }
