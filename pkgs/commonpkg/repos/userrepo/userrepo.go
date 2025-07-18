@@ -9,11 +9,15 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+////////////////////////////////////////////////////////////////////////////////
+
 type Repo struct{}
 
 func New() *Repo {
 	return &Repo{}
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 func (r *Repo) Create(db *sqlx.DB, usr *model.User) error {
 	stmt := `INSERT INTO users(id, screen_name, name, protected, friends_count) VALUES(:id, :screen_name, :name, :protected, :friends_count)`
@@ -21,11 +25,14 @@ func (r *Repo) Create(db *sqlx.DB, usr *model.User) error {
 	return err
 }
 
-func (r *Repo) Delete(db *sqlx.DB, uid uint64) error {
-	stmt := `DELETE FROM users WHERE id=?`
-	_, err := db.Exec(stmt, uid)
+func (r *Repo) Upsert(db *sqlx.DB, usr *model.User) error {
+	stmt := `INSERT INTO users(id, screen_name, name, protected, friends_count) VALUES(:id, :screen_name, :name, :protected, :friends_count)
+			ON CONFLICT(id) DO UPDATE SET screen_name=:screen_name, name=:name, protected=:protected, friends_count=:friends_count, updated_at=CURRENT_TIMESTAMP`
+	_, err := db.NamedExec(stmt, usr)
 	return err
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 func (r *Repo) GetById(db *sqlx.DB, uid uint64) (*model.User, error) {
 	stmt := `SELECT * FROM users WHERE id=?`
@@ -41,11 +48,23 @@ func (r *Repo) GetById(db *sqlx.DB, uid uint64) (*model.User, error) {
 	return result, nil
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 func (r *Repo) Update(db *sqlx.DB, usr *model.User) error {
 	stmt := `UPDATE users SET screen_name=:screen_name, name=:name, protected=:protected, friends_count=:friends_count, updated_at=CURRENT_TIMESTAMP WHERE id=:id`
 	_, err := db.NamedExec(stmt, usr)
 	return err
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+func (r *Repo) Delete(db *sqlx.DB, uid uint64) error {
+	stmt := `DELETE FROM users WHERE id=?`
+	_, err := db.Exec(stmt, uid)
+	return err
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 func (r *Repo) CreateEntity(db *sqlx.DB, entity *model.UserEntity) error {
 	abs, err := filepath.Abs(entity.ParentDir)
@@ -132,11 +151,16 @@ func (r *Repo) SetEntityLatestReleaseTime(db *sqlx.DB, id int, t time.Time) erro
 	return err
 }
 
-func (r *Repo) RecordPreviousName(db *sqlx.DB, uid uint64, name string, screenName string) error {
+////////////////////////////////////////////////////////////////////////////////
+
+// TODO:
+func (r *Repo) CreatePreviousName(db *sqlx.DB, uid uint64, name string, screenName string) error {
 	stmt := `INSERT INTO user_previous_names(uid, screen_name, name) VALUES(?, ?, ?)`
 	_, err := db.Exec(stmt, uid, screenName, name)
 	return err
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 func (r *Repo) CreateLink(db *sqlx.DB, lnk *model.UserLink) error {
 	stmt := `INSERT INTO user_links(user_id, name, parent_lst_entity_id) VALUES(:user_id, :name, :parent_lst_entity_id)`

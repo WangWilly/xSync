@@ -24,7 +24,8 @@ type TitledUserList struct {
 	Title string
 	Users []*User
 
-	BelongsTo *User
+	BelongsTo   *User
+	TwitterName string
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -36,11 +37,12 @@ func NewTulByTwitterUserId(ctx context.Context, client *Client, userId uint64) (
 	}
 
 	return &TitledUserList{
-		Type:      TITLED_TYPE_TWITTER_USER,
-		Id:        userId,
-		Title:     fmt.Sprintf("%s(%s)", user.Name, user.ScreenName),
-		Users:     []*User{user},
-		BelongsTo: user,
+		Type:        TITLED_TYPE_TWITTER_USER,
+		Id:          userId,
+		Title:       fmt.Sprintf("%s(%s)", user.Name, user.ScreenName),
+		Users:       []*User{user},
+		BelongsTo:   user,
+		TwitterName: user.Name,
 	}, nil
 }
 
@@ -51,11 +53,12 @@ func NewTulByTwitterUserName(ctx context.Context, client *Client, screenName str
 	}
 
 	return &TitledUserList{
-		Type:      TITLED_TYPE_TWITTER_USER,
-		Id:        user.TwitterId,
-		Title:     fmt.Sprintf("%s(%s)", user.Name, user.ScreenName),
-		Users:     []*User{user},
-		BelongsTo: user,
+		Type:        TITLED_TYPE_TWITTER_USER,
+		Id:          user.TwitterId,
+		Title:       fmt.Sprintf("%s(%s)", user.Name, user.ScreenName),
+		Users:       []*User{user},
+		BelongsTo:   user,
+		TwitterName: user.Name,
 	}, nil
 }
 
@@ -82,11 +85,12 @@ func NewTulByTwitterListId(ctx context.Context, client *Client, listId uint64) (
 	}
 
 	return &TitledUserList{
-		Type:      TITLED_TYPE_TWITTER_LIST,
-		Id:        id_str.Uint(),
-		Title:     fmt.Sprintf("%s(%d)", name.String(), id_str.Uint()),
-		Users:     members,
-		BelongsTo: creator,
+		Type:        TITLED_TYPE_TWITTER_LIST,
+		Id:          id_str.Uint(),
+		Title:       fmt.Sprintf("%s(%d)", name.String(), id_str.Uint()),
+		Users:       members,
+		BelongsTo:   creator,
+		TwitterName: name.String(),
 	}, nil
 }
 
@@ -144,10 +148,11 @@ func NewTulByTwitterFollowingUserId(ctx context.Context, client *Client, userId 
 	}
 
 	return &TitledUserList{
-		Type:      TITLED_TYPE_TWITTER_FOLLOWERS,
-		Id:        userId,
-		Title:     fmt.Sprintf("%s(%s)", user.Name, user.ScreenName),
-		Users:     followers,
-		BelongsTo: user,
+		Type:        TITLED_TYPE_TWITTER_FOLLOWERS,
+		Id:          userId,
+		Title:       fmt.Sprintf("%s(%s)", user.Name, user.ScreenName),
+		Users:       followers,
+		BelongsTo:   user,
+		TwitterName: user.Name,
 	}, nil
 }

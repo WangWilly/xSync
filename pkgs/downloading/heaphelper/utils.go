@@ -50,6 +50,8 @@ func ExpectNameMustExistOnStorage(path smartpathdto.SmartPath, expectedName stri
 	return os.MkdirAll(p, 0755)
 }
 
+// Deprecated: Use userRepo directly for CRUD operations
+//
 // syncTwitterUserToDb updates the database record for a user
 // 更新数据库中对用户的记录
 func syncTwitterUserToDb(db *sqlx.DB, twitterUser *twitterclient.User) error {
@@ -82,7 +84,7 @@ func syncTwitterUserToDb(db *sqlx.DB, twitterUser *twitterclient.User) error {
 		return err
 	}
 	if renamed || isNew {
-		err = database.RecordUserPreviousName(db, twitterUser.TwitterId, twitterUser.Name, twitterUser.ScreenName)
+		err = database.CreateUserPreviousName(db, twitterUser.TwitterId, twitterUser.Name, twitterUser.ScreenName)
 	}
 	return err
 }

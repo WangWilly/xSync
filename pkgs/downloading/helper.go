@@ -19,6 +19,10 @@ type Config struct {
 
 type helper struct {
 	cfg Config
+	db  *sqlx.DB //
+
+	userRepo UserRepo
+	listRepo ListRepo
 
 	heapHelper HeapHelper
 	dbWorker   DbWorker

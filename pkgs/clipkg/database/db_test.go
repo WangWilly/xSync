@@ -91,7 +91,7 @@ func testUser(t *testing.T, usr *model.User) {
 	}
 
 	// record previous name
-	if err = RecordUserPreviousName(db, usr.Id, usr.Name, usr.ScreenName); err != nil {
+	if err = CreateUserPreviousName(db, usr.Id, usr.Name, usr.ScreenName); err != nil {
 		t.Error(err)
 		return
 	}

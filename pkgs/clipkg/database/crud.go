@@ -85,8 +85,8 @@ func SetUserEntityLatestReleaseTime(db *sqlx.DB, id int, t time.Time) error {
 }
 
 // Deprecated: Use userRepo directly for CRUD operations
-func RecordUserPreviousName(db *sqlx.DB, uid uint64, name string, screenName string) error {
-	return userRepo.RecordPreviousName(db, uid, name, screenName)
+func CreateUserPreviousName(db *sqlx.DB, uid uint64, name string, screenName string) error {
+	return userRepo.CreatePreviousName(db, uid, name, screenName)
 }
 
 // Deprecated: Use userRepo directly for CRUD operations
