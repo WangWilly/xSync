@@ -4,12 +4,22 @@ import (
 	"context"
 
 	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/twitterclient"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/utils"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
 	"github.com/WangWilly/xSync/pkgs/downloading/resolveworker"
 	"github.com/jmoiron/sqlx"
 )
+
+type UserRepo interface {
+	Upsert(db *sqlx.DB, usr *model.User) error
+	CreatePreviousName(db *sqlx.DB, uid uint64, name string, screenName string) error
+}
+
+type ListRepo interface {
+	Upsert(db *sqlx.DB, lst *model.List) error
+}
 
 type HeapHelper interface {
 	GetDepth(userSmartPath *smartpathdto.UserSmartPath) int

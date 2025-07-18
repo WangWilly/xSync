@@ -19,7 +19,7 @@ type UserRepo interface {
 	GetEntityById(db *sqlx.DB, id int) (*model.UserEntity, error)
 	GetLink(db *sqlx.DB, uid uint64, parentLstEntityId int32) (*model.UserLink, error)
 	GetLinks(db *sqlx.DB, uid uint64) ([]*model.UserLink, error)
-	RecordPreviousName(db *sqlx.DB, uid uint64, name string, screenName string) error
+	CreatePreviousName(db *sqlx.DB, uid uint64, name string, screenName string) error
 	SetEntityLatestReleaseTime(db *sqlx.DB, id int, t time.Time) error
 	Update(db *sqlx.DB, usr *model.User) error
 	UpdateEntity(db *sqlx.DB, entity *model.UserEntity) error
@@ -29,11 +29,14 @@ type UserRepo interface {
 }
 
 type ListRepo interface {
+	// Deprecated: use Upsert instead
 	Create(db *sqlx.DB, lst *model.List) error
 	CreateEntity(db *sqlx.DB, entity *model.ListEntity) error
 	Delete(db *sqlx.DB, lid uint64) error
 	DeleteEntity(db *sqlx.DB, id int) error
+	// Deprecated: use Upsert instead
 	GetById(db *sqlx.DB, lid uint64) (*model.List, error)
+	Upsert(db *sqlx.DB, lst *model.List) error
 	GetEntity(db *sqlx.DB, lid int64, parentDir string) (*model.ListEntity, error)
 	GetEntityById(db *sqlx.DB, id int) (*model.ListEntity, error)
 	Update(db *sqlx.DB, lst *model.List) error

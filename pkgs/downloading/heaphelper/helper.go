@@ -73,30 +73,6 @@ func NewHelperFromTasks(
 	return res, nil
 }
 
-/**
-func NewHelper(users []UserWithinListEntity, twitterClientManager *twitterclient.Manager) *helper {
-	uidToUserMap := make(map[uint64]*twitterclient.User)
-	for _, u := range users {
-		uidToUserMap[u.User.TwitterId] = u.User
-	}
-
-	return &helper{
-		uidToUserMap:         uidToUserMap,
-		users:                users,
-		userSmartPathToDepth: make(map[*smartpathdto.UserSmartPath]int),
-
-		listRepo:             listrepo.New(),
-		twitterClientManager: twitterClientManager,
-
-		syncedUserSmartPaths: sync.Map{},
-		syncedListUsers:      sync.Map{},
-
-		heap: nil,
-		mtx:  sync.Mutex{},
-	}
-}
-*/
-
 ////////////////////////////////////////////////////////////////////////////////
 
 func (h *helper) MakeHeap(
