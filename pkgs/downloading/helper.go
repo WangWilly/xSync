@@ -5,6 +5,7 @@ import (
 	"runtime"
 
 	"github.com/WangWilly/xSync/pkgs/clipkg/workers"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
@@ -20,6 +21,9 @@ type Config struct {
 type helper struct {
 	cfg Config
 	db  *sqlx.DB //
+
+	twitterClientManager *twitterclient.Manager //
+	ifDoFollow           bool
 
 	userRepo UserRepo
 	listRepo ListRepo

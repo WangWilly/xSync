@@ -4,79 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/juptokenclient"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/jmoiron/sqlx"
 )
-
-func (r *repo) UpsertFromJupTokenDto(ctx context.Context, db *sqlx.DB, tokenInfo *juptokenclient.JupTokenDto) (*model.Token, error) {
-	// Convert slices/structs to JSON strings
-	tagsJSON, err := json.Marshal(tokenInfo.Tags)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal tags: %w", err)
-	}
-
-	var dailyJSON, extensionsJSON string
-	if tokenInfo.DailyVolume != nil {
-		dailyBytes, err := json.Marshal(map[string]interface{}{
-			"volume": *tokenInfo.DailyVolume,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal daily: %w", err)
-		}
-		dailyJSON = string(dailyBytes)
-	}
-
-	if tokenInfo.Extensions != nil {
-		extensionsBytes, err := json.Marshal(tokenInfo.Extensions)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal extensions: %w", err)
-		}
-		extensionsJSON = string(extensionsBytes)
-	}
-
-	// Try to insert, update if exists
-	query := `
-		INSERT INTO tokens (address, chain_id, decimals, name, symbol, logo_uri, tags, daily, extensions, created_at, updated_at, chroma_document_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, '')
-		ON CONFLICT (address) DO UPDATE SET
-			chain_id = EXCLUDED.chain_id,
-			decimals = EXCLUDED.decimals,
-			name = EXCLUDED.name,
-			symbol = EXCLUDED.symbol,
-			logo_uri = EXCLUDED.logo_uri,
-			tags = EXCLUDED.tags,
-			daily = EXCLUDED.daily,
-			extensions = EXCLUDED.extensions,
-			updated_at = EXCLUDED.updated_at
-		RETURNING id, address, chain_id, decimals, name, symbol, logo_uri, tags, daily, extensions, created_at, updated_at, chroma_embedded, chroma_document_id
-	`
-
-	now := time.Now()
-	token := &model.Token{}
-
-	err = db.QueryRowxContext(ctx, query,
-		tokenInfo.Address,
-		1, // Default chain ID for Solana
-		tokenInfo.Decimals,
-		tokenInfo.Name,
-		tokenInfo.Symbol,
-		tokenInfo.LogoURI,
-		string(tagsJSON),
-		dailyJSON,
-		extensionsJSON,
-		now,
-		now,
-	).StructScan(token)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to save token: %w", err)
-	}
-
-	return token, nil
-}
 
 func (r *repo) BatchUpsertFromJupTokenDto(ctx context.Context, db *sqlx.DB, tokens []juptokenclient.JupTokenDto) ([]model.Token, error) {
 	if len(tokens) == 0 {
@@ -96,32 +28,28 @@ func (r *repo) BatchUpsertFromJupTokenDto(ctx context.Context, db *sqlx.DB, toke
 
 	// Prepare the statement once for all inserts
 	query := `
-		INSERT INTO tokens (address, chain_id, decimals, name, symbol, logo_uri, tags, daily, extensions, created_at, updated_at, chroma_document_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, '')
+		INSERT INTO tokens (address, chain_id, decimals, name, symbol, logo_uri, tags, daily, extensions)
+		VALUES (:address, :chain_id, :decimals, :name, :symbol, :logo_uri, :tags, :daily, :extensions)
 		ON CONFLICT (address) DO UPDATE SET
-			chain_id = EXCLUDED.chain_id,
-			decimals = EXCLUDED.decimals,
-			name = EXCLUDED.name,
-			symbol = EXCLUDED.symbol,
-			logo_uri = EXCLUDED.logo_uri,
-			tags = EXCLUDED.tags,
-			daily = EXCLUDED.daily,
-			extensions = EXCLUDED.extensions,
-			updated_at = EXCLUDED.updated_at
+			chain_id=:chain_id,
+			decimals=:decimals,
+			name=:name,
+			symbol=:symbol,
+			logo_uri=:logo_uri,
+			tags=:tags,
+			daily=:daily,
+			extensions=:extensions,
+			updated_at=CURRENT_TIMESTAMP
 		RETURNING id, address, chain_id, decimals, name, symbol, logo_uri, tags, daily, extensions, created_at, updated_at, chroma_embedded, chroma_document_id
 	`
-
-	stmt, err := tx.PreparexContext(ctx, query)
+	stmt, err := tx.PrepareNamedContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare statement: %w", err)
 	}
 	defer stmt.Close()
 
-	now := time.Now()
-	result := make([]model.Token, 0, len(tokens))
-
-	// Process each token
-	for _, tokenInfo := range tokens {
+	result := make([]model.Token, len(tokens))
+	for i, tokenInfo := range tokens {
 		// Convert slices/structs to JSON strings
 		tagsJSON, err := json.Marshal(tokenInfo.Tags)
 		if err != nil {
@@ -148,26 +76,20 @@ func (r *repo) BatchUpsertFromJupTokenDto(ctx context.Context, db *sqlx.DB, toke
 		}
 
 		// Execute the prepared statement for this token
-		var token model.Token
-		err = stmt.QueryRowxContext(ctx,
-			tokenInfo.Address,
-			1, // Default chain ID for Solana
-			tokenInfo.Decimals,
-			tokenInfo.Name,
-			tokenInfo.Symbol,
-			tokenInfo.LogoURI,
-			string(tagsJSON),
-			dailyJSON,
-			extensionsJSON,
-			now,
-			now,
-		).StructScan(&token)
-
-		if err != nil {
+		result[i] = model.Token{
+			Address:    tokenInfo.Address,
+			ChainID:    1,
+			Decimals:   tokenInfo.Decimals,
+			Name:       tokenInfo.Name,
+			Symbol:     tokenInfo.Symbol,
+			LogoURI:    tokenInfo.LogoURI,
+			Tags:       string(tagsJSON),
+			Daily:      dailyJSON,
+			Extensions: extensionsJSON,
+		}
+		if err := stmt.QueryRowxContext(ctx, &result[i]).StructScan(&result[i]); err != nil {
 			return nil, fmt.Errorf("failed to save token %s: %w", tokenInfo.Address, err)
 		}
-
-		result = append(result, token)
 	}
 
 	// Commit the transaction

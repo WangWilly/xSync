@@ -8,7 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (h *helper) SaveToDb(ctx context.Context, metas []*twitterclient.TitledUserList) error {
+func (h *helper) saveToDb(ctx context.Context, metas []*twitterclient.TitledUserList) error {
 	logger := log.WithField("function", "SaveToDb")
 	logger.Infoln("saving entities to database")
 

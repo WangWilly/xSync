@@ -15,6 +15,20 @@ type UserSmartPath struct {
 	Record     *model.UserEntity
 	db         *sqlx.DB
 	isSyncToDb bool
+
+	Depth int
+}
+
+func New(record *model.UserEntity, depth int) *UserSmartPath {
+	if record == nil {
+		return nil
+	}
+	return &UserSmartPath{
+		Record:     record,
+		db:         nil,
+		isSyncToDb: true,
+		Depth:      depth,
+	}
 }
 
 func NewUserSmartPath(db *sqlx.DB, twitterId uint64, parentDir string) (*UserSmartPath, error) {

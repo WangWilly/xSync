@@ -20,7 +20,7 @@ type Token struct {
 	CreatedAt        time.Time `db:"created_at"`
 	UpdatedAt        time.Time `db:"updated_at"`
 	ChromaEmbedded   bool      `db:"chroma_embedded"`
-	ChromaDocumentID string    `db:"chroma_document_id"`
+	ChromaDocumentID *string   `db:"chroma_document_id"` // Using pointer to handle NULL
 }
 
 // TokenEmbedding represents token embedding tracking in PostgreSQL
