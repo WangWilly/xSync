@@ -1,6 +1,7 @@
 package userrepo
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -18,11 +19,11 @@ func New() *Repo {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Create(db *sqlx.DB, usr *model.User) error {
+func (r *Repo) Create(ctx context.Context, db *sqlx.DB, usr *model.User) error {
 	stmt := `INSERT INTO users(id, screen_name, name, protected, friends_count) 
 			VALUES(:id, :screen_name, :name, :protected, :friends_count)
 			RETURNING id, screen_name, name, protected, friends_count, created_at, updated_at`
-	rows, err := db.NamedQuery(stmt, usr)
+	rows, err := db.NamedQueryContext(ctx, stmt, usr)
 	if err != nil {
 		return err
 	}
@@ -37,11 +38,11 @@ func (r *Repo) Create(db *sqlx.DB, usr *model.User) error {
 	return nil
 }
 
-func (r *Repo) Upsert(db *sqlx.DB, usr *model.User) error {
+func (r *Repo) Upsert(ctx context.Context, db *sqlx.DB, usr *model.User) error {
 	stmt := `INSERT INTO users(id, screen_name, name, protected, friends_count) VALUES(:id, :screen_name, :name, :protected, :friends_count)
 			ON CONFLICT(id) DO UPDATE SET screen_name=:screen_name, name=:name, protected=:protected, friends_count=:friends_count, updated_at=CURRENT_TIMESTAMP
 			RETURNING id, screen_name, name, protected, friends_count, created_at, updated_at`
-	rows, err := db.NamedQuery(stmt, usr)
+	rows, err := db.NamedQueryContext(ctx, stmt, usr)
 	if err != nil {
 		return err
 	}
@@ -58,41 +59,47 @@ func (r *Repo) Upsert(db *sqlx.DB, usr *model.User) error {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) GetById(db *sqlx.DB, uid uint64) (*model.User, error) {
+func (r *Repo) GetById(ctx context.Context, db *sqlx.DB, uid uint64) (*model.User, error) {
 	stmt := `SELECT * FROM users WHERE id=$1`
 	result := &model.User{}
-	err := db.Get(result, stmt, uid)
+	err := db.GetContext(ctx, result, stmt, uid)
 	if err == sql.ErrNoRows {
-		result = nil
-		err = nil
+		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Update(db *sqlx.DB, usr *model.User) error {
+func (r *Repo) Update(ctx context.Context, db *sqlx.DB, usr *model.User) error {
 	stmt := `UPDATE users SET screen_name=:screen_name, name=:name, protected=:protected, friends_count=:friends_count, updated_at=CURRENT_TIMESTAMP WHERE id=:id`
-	_, err := db.NamedExec(stmt, usr)
+	_, err := db.NamedExecContext(ctx, stmt, usr)
 	return err
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Delete(db *sqlx.DB, uid uint64) error {
+func (r *Repo) Delete(ctx context.Context, db *sqlx.DB, uid uint64) error {
 	stmt := `DELETE FROM users WHERE id=$1`
-	_, err := db.Exec(stmt, uid)
+	_, err := db.ExecContext(ctx, stmt, uid)
 	return err
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO:
-func (r *Repo) CreatePreviousName(db *sqlx.DB, uid uint64, name string, screenName string) error {
+func (r *Repo) CreatePreviousName(
+	ctx context.Context,
+	db *sqlx.DB,
+	uid uint64,
+	name string,
+	screenName string,
+) error {
 	stmt := `INSERT INTO user_previous_names(uid, screen_name, name) VALUES($1, $2, $3)`
-	_, err := db.Exec(stmt, uid, screenName, name)
+	_, err := db.ExecContext(ctx, stmt, uid, screenName, name)
 	return err
 }

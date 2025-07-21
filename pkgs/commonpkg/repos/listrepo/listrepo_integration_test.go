@@ -1,6 +1,7 @@
 package listrepo
 
 import (
+	"context"
 	"log"
 	"testing"
 
@@ -92,6 +93,8 @@ func clearData() {
 }
 
 func TestRepoIntegration_Create(t *testing.T) {
+	ctx := context.Background()
+
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -110,7 +113,7 @@ func TestRepoIntegration_Create(t *testing.T) {
 		}
 
 		// Create the list
-		err := repo.Create(db, list)
+		err := repo.Create(ctx, db, list)
 		require.NoError(t, err)
 
 		// Verify list was created in the database
@@ -130,6 +133,8 @@ func TestRepoIntegration_Create(t *testing.T) {
 }
 
 func TestRepoIntegration_Upsert(t *testing.T) {
+	ctx := context.Background()
+
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -148,7 +153,7 @@ func TestRepoIntegration_Upsert(t *testing.T) {
 		}
 
 		// Upsert the list (should insert)
-		err := repo.Upsert(db, list)
+		err := repo.Upsert(ctx, db, list)
 		require.NoError(t, err)
 
 		// Verify list was created in the database
@@ -188,7 +193,7 @@ func TestRepoIntegration_Upsert(t *testing.T) {
 		}
 
 		// Upsert the list (should update)
-		err = repo.Upsert(db, list)
+		err = repo.Upsert(ctx, db, list)
 		require.NoError(t, err)
 
 		// Verify list was updated in the database
@@ -210,6 +215,8 @@ func TestRepoIntegration_Upsert(t *testing.T) {
 }
 
 func TestRepoIntegration_GetById(t *testing.T) {
+	ctx := context.Background()
+
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -235,7 +242,7 @@ func TestRepoIntegration_GetById(t *testing.T) {
 		require.NoError(t, err)
 
 		// Get the list
-		dbList, err := repo.GetById(db, list.Id)
+		dbList, err := repo.GetById(ctx, db, list.Id)
 		require.NoError(t, err)
 		require.NotNil(t, dbList)
 
@@ -247,7 +254,7 @@ func TestRepoIntegration_GetById(t *testing.T) {
 
 	t.Run("get non-existent list", func(t *testing.T) {
 		// Get a list that doesn't exist
-		dbList, err := repo.GetById(db, 99999)
+		dbList, err := repo.GetById(ctx, db, 99999)
 		require.NoError(t, err)
 		assert.Nil(t, dbList)
 	})

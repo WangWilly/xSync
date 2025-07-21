@@ -1,6 +1,7 @@
 package mediarepo
 
 import (
+	"context"
 	"log"
 	"testing"
 
@@ -93,6 +94,8 @@ func clearData() {
 }
 
 func TestRepoIntegration_Create(t *testing.T) {
+	ctx := context.Background()
+
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -114,7 +117,7 @@ func TestRepoIntegration_Create(t *testing.T) {
 		assert.Equal(t, int64(0), media.Id)
 
 		// Create the media using our repository
-		err := repo.Create(db, media)
+		err := repo.Create(ctx, db, media)
 		require.NoError(t, err)
 
 		// Verify ID was updated
@@ -138,7 +141,7 @@ func TestRepoIntegration_Create(t *testing.T) {
 		}
 
 		// Create the media in the database
-		err = repo.Create(db, media2)
+		err = repo.Create(ctx, db, media2)
 		require.NoError(t, err)
 
 		// Verify ID was updated sequentially
@@ -147,6 +150,8 @@ func TestRepoIntegration_Create(t *testing.T) {
 }
 
 func TestRepoIntegration_Update(t *testing.T) {
+	ctx := context.Background()
+
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -165,7 +170,7 @@ func TestRepoIntegration_Update(t *testing.T) {
 		}
 
 		// Create the media in the database
-		err := repo.Create(db, media)
+		err := repo.Create(ctx, db, media)
 		require.NoError(t, err)
 
 		// Get the original media to compare timestamps
@@ -183,7 +188,7 @@ func TestRepoIntegration_Update(t *testing.T) {
 
 		// Update the media
 		media.Location = "/path/to/updated/media.jpg"
-		err = repo.Update(db, media)
+		err = repo.Update(ctx, db, media)
 		require.NoError(t, err)
 
 		// Get the updated media

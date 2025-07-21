@@ -1,6 +1,7 @@
 package tweetrepo
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -92,6 +93,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestRepoIntegration_Create(t *testing.T) {
+	ctx := context.Background()
+
 	repo := New()
 
 	t.Run("create tweet", func(t *testing.T) {
@@ -104,7 +107,7 @@ func TestRepoIntegration_Create(t *testing.T) {
 		}
 
 		// Act
-		err := repo.Create(db, tweet)
+		err := repo.Create(ctx, db, tweet)
 
 		// Assert
 		require.NoError(t, err)
@@ -113,6 +116,8 @@ func TestRepoIntegration_Create(t *testing.T) {
 }
 
 func TestRepoIntegration_GetById(t *testing.T) {
+	ctx := context.Background()
+
 	repo := New()
 
 	// Create a tweet first
@@ -122,13 +127,13 @@ func TestRepoIntegration_GetById(t *testing.T) {
 		Content:   "Test tweet content for GetById",
 		TweetTime: time.Now(),
 	}
-	err := repo.Create(db, tweet)
+	err := repo.Create(ctx, db, tweet)
 	require.NoError(t, err)
 	require.NotZero(t, tweet.Id)
 
 	t.Run("get existing tweet", func(t *testing.T) {
 		// Act
-		result, err := repo.GetById(db, tweet.Id)
+		result, err := repo.GetById(ctx, db, tweet.Id)
 
 		// Assert
 		require.NoError(t, err)
@@ -139,7 +144,7 @@ func TestRepoIntegration_GetById(t *testing.T) {
 
 	t.Run("get non-existent tweet", func(t *testing.T) {
 		// Act
-		result, err := repo.GetById(db, 9999)
+		result, err := repo.GetById(ctx, db, 9999)
 
 		// Assert
 		require.NoError(t, err)
@@ -148,6 +153,8 @@ func TestRepoIntegration_GetById(t *testing.T) {
 }
 
 func TestRepoIntegration_Update(t *testing.T) {
+	ctx := context.Background()
+
 	repo := New()
 
 	// Create a tweet first
@@ -157,7 +164,7 @@ func TestRepoIntegration_Update(t *testing.T) {
 		Content:   "Original content",
 		TweetTime: time.Now(),
 	}
-	err := repo.Create(db, tweet)
+	err := repo.Create(ctx, db, tweet)
 	require.NoError(t, err)
 	require.NotZero(t, tweet.Id)
 
@@ -167,13 +174,13 @@ func TestRepoIntegration_Update(t *testing.T) {
 		originalUpdatedAt := tweet.UpdatedAt
 
 		// Act
-		err := repo.Update(db, tweet)
+		err := repo.Update(ctx, db, tweet)
 
 		// Assert
 		require.NoError(t, err)
 
 		// Verify the update by fetching it again
-		updated, err := repo.GetById(db, tweet.Id)
+		updated, err := repo.GetById(ctx, db, tweet.Id)
 		require.NoError(t, err)
 		assert.Equal(t, "Updated content", updated.Content)
 		assert.NotEqual(t, originalUpdatedAt, updated.UpdatedAt)
@@ -181,6 +188,8 @@ func TestRepoIntegration_Update(t *testing.T) {
 }
 
 func TestRepoIntegration_GetByUserId(t *testing.T) {
+	ctx := context.Background()
+
 	repo := New()
 	userId := uint64(54321)
 
@@ -192,13 +201,13 @@ func TestRepoIntegration_GetByUserId(t *testing.T) {
 			Content:   fmt.Sprintf("User tweet %d", i),
 			TweetTime: time.Now().Add(time.Duration(-i) * time.Hour), // Decreasing time
 		}
-		err := repo.Create(db, tweet)
+		err := repo.Create(ctx, db, tweet)
 		require.NoError(t, err)
 	}
 
 	t.Run("get user tweets", func(t *testing.T) {
 		// Act
-		tweets, err := repo.GetByUserId(db, userId)
+		tweets, err := repo.GetByUserId(ctx, db, userId)
 
 		// Assert
 		require.NoError(t, err)
@@ -210,6 +219,8 @@ func TestRepoIntegration_GetByUserId(t *testing.T) {
 }
 
 func TestRepoIntegration_Delete(t *testing.T) {
+	ctx := context.Background()
+
 	repo := New()
 
 	// Create a tweet first
@@ -219,25 +230,27 @@ func TestRepoIntegration_Delete(t *testing.T) {
 		Content:   "Content to be deleted",
 		TweetTime: time.Now(),
 	}
-	err := repo.Create(db, tweet)
+	err := repo.Create(ctx, db, tweet)
 	require.NoError(t, err)
 	require.NotZero(t, tweet.Id)
 
 	t.Run("delete tweet", func(t *testing.T) {
 		// Act
-		err := repo.Delete(db, tweet.Id)
+		err := repo.Delete(ctx, db, tweet.Id)
 
 		// Assert
 		require.NoError(t, err)
 
 		// Verify deletion
-		result, err := repo.GetById(db, tweet.Id)
+		result, err := repo.GetById(ctx, db, tweet.Id)
 		require.NoError(t, err)
 		assert.Nil(t, result)
 	})
 }
 
 func TestRepoIntegration_GetByTweetId(t *testing.T) {
+	ctx := context.Background()
+
 	repo := New()
 	tweetId := uint64(555555)
 
@@ -248,12 +261,12 @@ func TestRepoIntegration_GetByTweetId(t *testing.T) {
 		Content:   "Tweet with specific tweet_id",
 		TweetTime: time.Now(),
 	}
-	err := repo.Create(db, tweet)
+	err := repo.Create(ctx, db, tweet)
 	require.NoError(t, err)
 
 	t.Run("get by tweet_id", func(t *testing.T) {
 		// Act
-		result, err := repo.GetByTweetId(db, tweetId)
+		result, err := repo.GetByTweetId(ctx, db, tweetId)
 
 		// Assert
 		require.NoError(t, err)
@@ -263,7 +276,7 @@ func TestRepoIntegration_GetByTweetId(t *testing.T) {
 
 	t.Run("get by non-existent tweet_id", func(t *testing.T) {
 		// Act
-		result, err := repo.GetByTweetId(db, 999999)
+		result, err := repo.GetByTweetId(ctx, db, 999999)
 
 		// Assert
 		require.NoError(t, err)
@@ -272,6 +285,8 @@ func TestRepoIntegration_GetByTweetId(t *testing.T) {
 }
 
 func TestRepoIntegration_GetWithMedia(t *testing.T) {
+	ctx := context.Background()
+
 	repo := New()
 	userId := uint64(777777)
 
@@ -282,7 +297,7 @@ func TestRepoIntegration_GetWithMedia(t *testing.T) {
 		Content:   "Tweet with media",
 		TweetTime: time.Now(),
 	}
-	err := repo.Create(db, tweet)
+	err := repo.Create(ctx, db, tweet)
 	require.NoError(t, err)
 
 	// Add media for this tweet
@@ -291,7 +306,7 @@ func TestRepoIntegration_GetWithMedia(t *testing.T) {
 
 	t.Run("get tweets with media", func(t *testing.T) {
 		// Act
-		results, err := repo.GetWithMedia(db, userId)
+		results, err := repo.GetWithMedia(ctx, db, userId)
 
 		// Assert
 		require.NoError(t, err)

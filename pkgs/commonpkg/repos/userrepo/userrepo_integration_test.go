@@ -1,6 +1,7 @@
 package userrepo
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -91,6 +92,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestRepoIntegration_Create(t *testing.T) {
+	ctx := context.Background()
+
 	repo := New()
 
 	t.Run("create user", func(t *testing.T) {
@@ -104,13 +107,13 @@ func TestRepoIntegration_Create(t *testing.T) {
 		}
 
 		// Act
-		err := repo.Create(db, user)
+		err := repo.Create(ctx, db, user)
 
 		// Assert
 		require.NoError(t, err)
 
 		// Verify creation
-		created, err := repo.GetById(db, user.Id)
+		created, err := repo.GetById(ctx, db, user.Id)
 		require.NoError(t, err)
 		assert.NotNil(t, created)
 		assert.Equal(t, user.Id, created.Id)
@@ -124,6 +127,8 @@ func TestRepoIntegration_Create(t *testing.T) {
 }
 
 func TestRepoIntegration_Upsert(t *testing.T) {
+	ctx := context.Background()
+
 	repo := New()
 
 	t.Run("upsert new user", func(t *testing.T) {
@@ -137,13 +142,13 @@ func TestRepoIntegration_Upsert(t *testing.T) {
 		}
 
 		// Act
-		err := repo.Upsert(db, user)
+		err := repo.Upsert(ctx, db, user)
 
 		// Assert
 		require.NoError(t, err)
 
 		// Verify insertion
-		created, err := repo.GetById(db, user.Id)
+		created, err := repo.GetById(ctx, db, user.Id)
 		require.NoError(t, err)
 		assert.NotNil(t, created)
 		assert.Equal(t, user.ScreenName, created.ScreenName)
@@ -155,7 +160,7 @@ func TestRepoIntegration_Upsert(t *testing.T) {
 	t.Run("upsert existing user", func(t *testing.T) {
 		// Arrange - Get the existing user
 		userId := uint64(23456)
-		existingUser, err := repo.GetById(db, userId)
+		existingUser, err := repo.GetById(ctx, db, userId)
 		require.NoError(t, err)
 		require.NotNil(t, existingUser)
 
@@ -172,13 +177,13 @@ func TestRepoIntegration_Upsert(t *testing.T) {
 		existingUser.FriendsCount = 200
 
 		// Act
-		err = repo.Upsert(db, existingUser)
+		err = repo.Upsert(ctx, db, existingUser)
 
 		// Assert
 		require.NoError(t, err)
 
 		// Verify update
-		updated, err := repo.GetById(db, userId)
+		updated, err := repo.GetById(ctx, db, userId)
 		require.NoError(t, err)
 		assert.NotNil(t, updated)
 		assert.Equal(t, "updateduser", updated.ScreenName)
@@ -190,6 +195,8 @@ func TestRepoIntegration_Upsert(t *testing.T) {
 }
 
 func TestRepoIntegration_GetById(t *testing.T) {
+	ctx := context.Background()
+
 	repo := New()
 
 	// Create a user first
@@ -200,12 +207,12 @@ func TestRepoIntegration_GetById(t *testing.T) {
 		IsProtected:  false,
 		FriendsCount: 50,
 	}
-	err := repo.Create(db, user)
+	err := repo.Create(ctx, db, user)
 	require.NoError(t, err)
 
 	t.Run("get existing user", func(t *testing.T) {
 		// Act
-		result, err := repo.GetById(db, user.Id)
+		result, err := repo.GetById(ctx, db, user.Id)
 
 		// Assert
 		require.NoError(t, err)
@@ -217,7 +224,7 @@ func TestRepoIntegration_GetById(t *testing.T) {
 
 	t.Run("get non-existent user", func(t *testing.T) {
 		// Act
-		result, err := repo.GetById(db, 99999)
+		result, err := repo.GetById(ctx, db, 99999)
 
 		// Assert
 		require.NoError(t, err)
@@ -226,6 +233,8 @@ func TestRepoIntegration_GetById(t *testing.T) {
 }
 
 func TestRepoIntegration_Update(t *testing.T) {
+	ctx := context.Background()
+
 	repo := New()
 
 	// Create a user first
@@ -236,11 +245,11 @@ func TestRepoIntegration_Update(t *testing.T) {
 		IsProtected:  false,
 		FriendsCount: 75,
 	}
-	err := repo.Create(db, user)
+	err := repo.Create(ctx, db, user)
 	require.NoError(t, err)
 
 	// Get the user to have the created timestamps
-	createdUser, err := repo.GetById(db, user.Id)
+	createdUser, err := repo.GetById(ctx, db, user.Id)
 	require.NoError(t, err)
 	initialUpdatedAt := createdUser.UpdatedAt
 
@@ -255,13 +264,13 @@ func TestRepoIntegration_Update(t *testing.T) {
 		createdUser.FriendsCount = 150
 
 		// Act
-		err := repo.Update(db, createdUser)
+		err := repo.Update(ctx, db, createdUser)
 
 		// Assert
 		require.NoError(t, err)
 
 		// Verify update
-		updated, err := repo.GetById(db, user.Id)
+		updated, err := repo.GetById(ctx, db, user.Id)
 		require.NoError(t, err)
 		assert.Equal(t, "updatedscreenname", updated.ScreenName)
 		assert.Equal(t, "Updated Name", updated.Name)
@@ -272,6 +281,8 @@ func TestRepoIntegration_Update(t *testing.T) {
 }
 
 func TestRepoIntegration_Delete(t *testing.T) {
+	ctx := context.Background()
+
 	repo := New()
 
 	// Create a user first
@@ -282,24 +293,26 @@ func TestRepoIntegration_Delete(t *testing.T) {
 		IsProtected:  false,
 		FriendsCount: 30,
 	}
-	err := repo.Create(db, user)
+	err := repo.Create(ctx, db, user)
 	require.NoError(t, err)
 
 	t.Run("delete user", func(t *testing.T) {
 		// Act
-		err := repo.Delete(db, user.Id)
+		err := repo.Delete(ctx, db, user.Id)
 
 		// Assert
 		require.NoError(t, err)
 
 		// Verify deletion
-		deleted, err := repo.GetById(db, user.Id)
+		deleted, err := repo.GetById(ctx, db, user.Id)
 		require.NoError(t, err)
 		assert.Nil(t, deleted)
 	})
 }
 
 func TestRepoIntegration_CreatePreviousName(t *testing.T) {
+	ctx := context.Background()
+
 	repo := New()
 
 	// Create a user first
@@ -310,12 +323,12 @@ func TestRepoIntegration_CreatePreviousName(t *testing.T) {
 		IsProtected:  false,
 		FriendsCount: 60,
 	}
-	err := repo.Create(db, user)
+	err := repo.Create(ctx, db, user)
 	require.NoError(t, err)
 
 	t.Run("create previous name", func(t *testing.T) {
 		// Act
-		err := repo.CreatePreviousName(db, user.Id, "Old Real Name", "oldscreenname")
+		err := repo.CreatePreviousName(ctx, db, user.Id, "Old Real Name", "oldscreenname")
 
 		// Assert
 		require.NoError(t, err)

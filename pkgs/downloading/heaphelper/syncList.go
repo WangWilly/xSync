@@ -103,7 +103,7 @@ func (h *helper) syncListAndGetMembers(
 ) ([]UserWithinListEntity, error) {
 	logger := log.WithField("caller", "heaphelper.syncLstAndGetMembers")
 
-	syncListToDbOut, err := h.syncListToDb(db, twitterList, dir)
+	syncListToDbOut, err := h.syncListToDb(ctx, db, twitterList, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -135,6 +135,7 @@ type syncListToDbOutput struct {
 }
 
 func (h *helper) syncListToDb(
+	ctx context.Context,
 	db *sqlx.DB,
 	twitterList twitterclient.ListBase,
 	dir string,
@@ -143,7 +144,7 @@ func (h *helper) syncListToDb(
 
 	if v, ok := twitterList.(*twitterclient.List); ok {
 		logger.Infof("process twitterclient.List with id: %d", v.Id)
-		if err := h.listRecordCreateOrUpdate(db, v); err != nil {
+		if err := h.listRecordCreateOrUpdate(ctx, db, v); err != nil {
 			return nil, err
 		}
 	}
@@ -157,10 +158,10 @@ func (h *helper) syncListToDb(
 	return &syncListToDbOutput{listSmartPath: entity}, nil
 }
 
-func (h *helper) listRecordCreateOrUpdate(db *sqlx.DB, list *twitterclient.List) error {
+func (h *helper) listRecordCreateOrUpdate(ctx context.Context, db *sqlx.DB, list *twitterclient.List) error {
 	logger := log.WithField("caller", "heaphelper.createOrUpdate")
 
-	listdb, err := h.listRepo.GetById(db, list.Id)
+	listdb, err := h.listRepo.GetById(ctx, db, list.Id)
 	if err != nil {
 		logger.Errorln("failed to get list from database:", err)
 		return err
@@ -175,9 +176,9 @@ func (h *helper) listRecordCreateOrUpdate(db *sqlx.DB, list *twitterclient.List)
 		logger.
 			WithField("list", list.Title()).
 			Infoln("list not found in database, creating new entry")
-		return h.listRepo.Create(db, updated)
+		return h.listRepo.Create(ctx, db, updated)
 	}
-	return h.listRepo.Update(db, updated)
+	return h.listRepo.Update(ctx, db, updated)
 }
 
 ////////////////////////////////////////////////////////////////////////////////

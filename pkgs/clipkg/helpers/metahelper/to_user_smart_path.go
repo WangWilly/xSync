@@ -27,7 +27,7 @@ func (h *helper) ToUserSmartPaths(
 				continue
 			}
 
-			userEntity, err := h.userRepo.GetEntityByTwitterId(h.db, user.TwitterId)
+			userEntity, err := h.userRepo.GetEntityByTwitterId(ctx, h.db, user.TwitterId)
 			if err != nil {
 				logger.Warnln("failed to get user entity by Twitter ID", user.TwitterId, ":", err)
 				continue

@@ -51,12 +51,19 @@ func (h *helper) saveUserToDb(ctx context.Context, user *twitterclient.User) err
 		return nil
 	}
 
-	if err := h.userRepo.CreatePreviousName(h.db, user.TwitterId, user.Name, user.ScreenName); err != nil {
+	if err := h.userRepo.CreatePreviousName(
+		ctx,
+		h.db,
+		user.TwitterId,
+		user.Name,
+		user.ScreenName,
+	); err != nil {
 		logger.Errorln("failed to create previous name:", err)
 		return err
 	}
 
 	if err := h.userRepo.Upsert(
+		ctx,
 		h.db,
 		&model.User{
 			Id:           user.TwitterId,
@@ -81,11 +88,15 @@ func (h *helper) saveListToDb(ctx context.Context, list *twitterclient.TitledUse
 		return nil
 	}
 
-	if err := h.listRepo.Upsert(h.db, &model.List{
-		Id:      list.Id,
-		Name:    list.TwitterName,
-		OwnerId: list.BelongsTo.TwitterId,
-	}); err != nil {
+	if err := h.listRepo.Upsert(
+		ctx,
+		h.db,
+		&model.List{
+			Id:      list.Id,
+			Name:    list.TwitterName,
+			OwnerId: list.BelongsTo.TwitterId,
+		},
+	); err != nil {
 		logger.Errorln("failed to upsert list:", err)
 		return err
 	}

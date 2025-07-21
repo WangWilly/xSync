@@ -10,6 +10,8 @@ import (
 
 // handleMedia serves media data as JSON
 func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	userID := r.URL.Path[len("/media/"):]
 	if userID == "" {
 		http.Error(w, "User ID required", http.StatusBadRequest)
@@ -23,7 +25,7 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get media from database
-	medias, err := s.mediaRepo.GetByUserId(s.db, id)
+	medias, err := s.mediaRepo.GetByUserId(ctx, s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get media: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -34,7 +36,7 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
 		media.Location = s.convertToRelativePath(media.Location)
 	}
 
-	user, err := s.userRepo.GetById(s.db, id)
+	user, err := s.userRepo.GetById(ctx, s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get user: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -56,6 +58,8 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
 
 // handleAPIMedia serves media data as JSON for API endpoints
 func (s *Server) handleAPIMedia(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	userID := r.URL.Path[len("/api/media/"):]
 	if userID == "" {
 		http.Error(w, "User ID required", http.StatusBadRequest)
@@ -69,7 +73,7 @@ func (s *Server) handleAPIMedia(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get media from database
-	medias, err := s.mediaRepo.GetByUserId(s.db, id)
+	medias, err := s.mediaRepo.GetByUserId(ctx, s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get media: "+err.Error(), http.StatusInternalServerError)
 		return

@@ -11,6 +11,8 @@ import (
 
 // handleTweets serves tweet data as JSON
 func (s *Server) handleTweets(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	userID := r.URL.Path[len("/tweets/"):]
 	if userID == "" {
 		http.Error(w, "User ID required", http.StatusBadRequest)
@@ -37,7 +39,7 @@ func (s *Server) handleTweets(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	user, err := s.userRepo.GetById(s.db, uint64(id))
+	user, err := s.userRepo.GetById(ctx, s.db, uint64(id))
 	if err != nil {
 		http.Error(w, "Failed to get user: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -59,6 +61,8 @@ func (s *Server) handleTweets(w http.ResponseWriter, r *http.Request) {
 
 // handleAPITweets serves tweets with media data as JSON
 func (s *Server) handleAPITweets(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	userID := r.URL.Path[len("/api/tweets/"):]
 	if userID == "" {
 		http.Error(w, "User ID required", http.StatusBadRequest)
@@ -72,7 +76,7 @@ func (s *Server) handleAPITweets(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get tweets with media from database
-	tweetsWithMedia, err := s.tweetRepo.GetWithMedia(s.db, id)
+	tweetsWithMedia, err := s.tweetRepo.GetWithMedia(ctx, s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get tweets: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -84,6 +88,8 @@ func (s *Server) handleAPITweets(w http.ResponseWriter, r *http.Request) {
 
 // handleTweetsWithMedia serves the tweets with media template page
 func (s *Server) handleTweetsWithMedia(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	userID := r.URL.Path[len("/tweets-media/"):]
 	if userID == "" {
 		http.Error(w, "User ID required", http.StatusBadRequest)
@@ -97,7 +103,7 @@ func (s *Server) handleTweetsWithMedia(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get user info
-	user, err := s.userRepo.GetById(s.db, id)
+	user, err := s.userRepo.GetById(ctx, s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get user: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -109,7 +115,7 @@ func (s *Server) handleTweetsWithMedia(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get tweets with media
-	tweetsWithMedia, err := s.tweetRepo.GetWithMedia(s.db, id)
+	tweetsWithMedia, err := s.tweetRepo.GetWithMedia(ctx, s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get tweets with media: "+err.Error(), http.StatusInternalServerError)
 		return

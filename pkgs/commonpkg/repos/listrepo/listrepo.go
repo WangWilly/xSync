@@ -1,6 +1,7 @@
 package listrepo
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -18,11 +19,11 @@ func New() *Repo {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Create(db *sqlx.DB, lst *model.List) error {
+func (r *Repo) Create(ctx context.Context, db *sqlx.DB, lst *model.List) error {
 	stmt := `INSERT INTO lsts(id, name, owner_uid) 
 			VALUES(:id, :name, :owner_uid)
 			RETURNING id, name, owner_uid, created_at, updated_at`
-	rows, err := db.NamedQuery(stmt, lst)
+	rows, err := db.NamedQueryContext(ctx, stmt, lst)
 	if err != nil {
 		return err
 	}
@@ -37,12 +38,12 @@ func (r *Repo) Create(db *sqlx.DB, lst *model.List) error {
 	return nil
 }
 
-func (r *Repo) Upsert(db *sqlx.DB, lst *model.List) error {
+func (r *Repo) Upsert(ctx context.Context, db *sqlx.DB, lst *model.List) error {
 	stmt := `INSERT INTO lsts(id, name, owner_uid)
 			VALUES(:id, :name, :owner_uid)
 			ON CONFLICT(id) DO UPDATE SET name=:name, updated_at=CURRENT_TIMESTAMP
 			RETURNING id, name, owner_uid, created_at, updated_at`
-	rows, err := db.NamedQuery(stmt, &lst)
+	rows, err := db.NamedQueryContext(ctx, stmt, &lst)
 	if err != nil {
 		return err
 	}
@@ -59,7 +60,7 @@ func (r *Repo) Upsert(db *sqlx.DB, lst *model.List) error {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) GetById(db *sqlx.DB, lid uint64) (*model.List, error) {
+func (r *Repo) GetById(ctx context.Context, db *sqlx.DB, lid uint64) (*model.List, error) {
 	stmt := `SELECT * FROM lsts WHERE id = $1`
 	result := &model.List{}
 	err := db.Get(result, stmt, lid)
@@ -74,16 +75,16 @@ func (r *Repo) GetById(db *sqlx.DB, lid uint64) (*model.List, error) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Delete(db *sqlx.DB, lid uint64) error {
+func (r *Repo) Delete(ctx context.Context, db *sqlx.DB, lid uint64) error {
 	stmt := `DELETE FROM lsts WHERE id=$1`
-	_, err := db.Exec(stmt, lid)
+	_, err := db.ExecContext(ctx, stmt, lid)
 	return err
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Update(db *sqlx.DB, lst *model.List) error {
+func (r *Repo) Update(ctx context.Context, db *sqlx.DB, lst *model.List) error {
 	stmt := `UPDATE lsts SET name=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`
-	_, err := db.Exec(stmt, lst.Name, lst.Id)
+	_, err := db.ExecContext(ctx, stmt, lst.Name, lst.Id)
 	return err
 }

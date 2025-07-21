@@ -5,10 +5,7 @@ import (
 	"runtime"
 
 	"github.com/WangWilly/xSync/pkgs/clipkg/workers"
-	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/listrepo"
-	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/userrepo"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
-	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -19,18 +16,11 @@ type Config struct {
 type helper struct {
 	cfg Config
 
-	db       *sqlx.DB
-	userRepo UserRepo
-	listRepo ListRepo
-
-	heapHelper HeapHelper
-	dbWorker   DbWorker
+	dbWorker DbWorker
 }
 
 func NewDownloadHelperWithConfig(
 	cfg Config,
-	db *sqlx.DB,
-	heaphelper HeapHelper,
 	dbWorker DbWorker,
 ) *helper {
 	defaultMaxDownloadRoutine := min(100, runtime.GOMAXPROCS(0)*10)
@@ -39,12 +29,8 @@ func NewDownloadHelperWithConfig(
 	}
 
 	return &helper{
-		cfg:        cfg,
-		db:         db,
-		userRepo:   userrepo.New(),
-		listRepo:   listrepo.New(),
-		heapHelper: heaphelper,
-		dbWorker:   dbWorker,
+		cfg:      cfg,
+		dbWorker: dbWorker,
 	}
 }
 
@@ -56,14 +42,13 @@ func (h *helper) BatchUserDownloadWithDB(ctx context.Context) ([]*dldto.NewEntit
 
 	simpleWorker := workers.NewSimpleWorker[*dldto.NewEntity](ctx, cancel, h.cfg.MaxDownloadRoutine)
 	producer := func(ctx context.Context, cancel context.CancelCauseFunc, output chan<- *dldto.NewEntity) ([]*dldto.NewEntity, error) {
-		return h.dbWorker.ProduceFromHeapToTweetChanWithDB(ctx, cancel, h.heapHelper, h.db, output, simpleWorker.IncrementProduced)
+		return h.dbWorker.ProduceFromHeapToTweetChanWithDB(ctx, cancel, output, simpleWorker.IncrementProduced)
 	}
 	consumer := func(ctx context.Context, cancel context.CancelCauseFunc, input <-chan *dldto.NewEntity) []*dldto.NewEntity {
-		return h.dbWorker.DownloadTweetMediaFromTweetChanWithDB(ctx, cancel, h.db, input, simpleWorker.IncrementConsumed)
+		return h.dbWorker.DownloadTweetMediaFromTweetChanWithDB(ctx, cancel, input, simpleWorker.IncrementConsumed)
 	}
 
 	result := simpleWorker.Process(producer, consumer, h.cfg.MaxDownloadRoutine)
-
 	logger.
 		WithFields(
 			log.Fields{
@@ -115,11 +100,10 @@ func (h *helper) BatchDownloadTweetWithDB(ctx context.Context, tweetDlMetas ...*
 		return unsent, nil
 	}
 	consumer := func(ctx context.Context, cancel context.CancelCauseFunc, input <-chan *dldto.NewEntity) []*dldto.NewEntity {
-		return h.dbWorker.DownloadTweetMediaFromTweetChanWithDB(ctx, cancel, h.db, input, simpleWorker.IncrementConsumed)
+		return h.dbWorker.DownloadTweetMediaFromTweetChanWithDB(ctx, cancel, input, simpleWorker.IncrementConsumed)
 	}
 
 	result := simpleWorker.Process(producer, consumer, min(len(tweetDlMetas), h.cfg.MaxDownloadRoutine))
-
 	logger.
 		WithFields(
 			log.Fields{

@@ -51,6 +51,7 @@ func (h *helper) saveUserToStorage(ctx context.Context, rootDir string, user *tw
 
 	folderName := utils.ToLegalWindowsFileName(user.Title())
 	if err := h.userRepo.UpsertEntity(
+		ctx,
 		h.db,
 		&model.UserEntity{
 			Uid:        user.TwitterId,
@@ -70,7 +71,12 @@ func (h *helper) saveUserToStorage(ctx context.Context, rootDir string, user *tw
 		return err
 	}
 
-	if err := h.userRepo.UpdateEntityStorageSavedByTwitterId(h.db, user.TwitterId, true); err != nil {
+	if err := h.userRepo.UpdateEntityStorageSavedByTwitterId(
+		ctx,
+		h.db,
+		user.TwitterId,
+		true,
+	); err != nil {
 		logger.Errorln("failed to update user entity storage saved:", err)
 		return err
 	}
@@ -94,6 +100,7 @@ func (h *helper) saveListToStorage(ctx context.Context, rootDir string, list *tw
 		FolderName: folderName,
 	}
 	if err := h.listRepo.UpsertEntity(
+		ctx,
 		h.db,
 		record,
 	); err != nil {
@@ -108,7 +115,7 @@ func (h *helper) saveListToStorage(ctx context.Context, rootDir string, list *tw
 		return err
 	}
 
-	if err := h.listRepo.UpdateEntityStorageSavedByTwitterId(h.db, list.Id, true); err != nil {
+	if err := h.listRepo.UpdateEntityStorageSavedByTwitterId(ctx, h.db, list.Id, true); err != nil {
 		logger.Errorln("failed to update list entity storage saved:", err)
 		return err
 	}
@@ -116,6 +123,7 @@ func (h *helper) saveListToStorage(ctx context.Context, rootDir string, list *tw
 	// TODO:
 	for _, user := range list.Users {
 		h.userRepo.UpsertLink(
+			ctx,
 			h.db,
 			&model.UserLink{
 				UserTwitterId:        user.TwitterId,

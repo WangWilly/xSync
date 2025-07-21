@@ -94,7 +94,7 @@ func (h *helper) MakeHeap(
 			continue
 		}
 
-		userSmartPath := h.getUserSmartPathByTwitterId(user, db, dir)
+		userSmartPath := h.getUserSmartPathByTwitterId(ctx, user, db, dir)
 		if userSmartPath == nil {
 			userLogger.Warnln("failed to get user smart path, skipping user")
 			continue
@@ -148,7 +148,7 @@ func (h *helper) MakeHeap(
 		}
 		storageFolderForUser, _ := userSmartPath.Path()
 		if err := os.Symlink(storageFolderForUser, linkpath); err == nil || os.IsExist(err) {
-			err := h.userRepo.CreateLink(db, userLink)
+			err := h.userRepo.CreateLink(ctx, db, userLink)
 			if err != nil {
 				userLogger.Warnln("failed to create link in database:", err)
 			}
@@ -181,6 +181,7 @@ func (h *helper) MakeHeap(
 }
 
 func (h *helper) getUserSmartPathByTwitterId(
+	ctx context.Context,
 	user *twitterclient.User,
 	db *sqlx.DB,
 	dir string,
@@ -204,7 +205,7 @@ func (h *helper) getUserSmartPathByTwitterId(
 	h.syncedUserSmartPaths.Store(user.TwitterId, userSmartPath)
 
 	// 同步所有现存的指向此用户的符号链接
-	linksUserBelongTo, err := h.userRepo.GetLinks(db, user.TwitterId)
+	linksUserBelongTo, err := h.userRepo.GetLinks(ctx, db, user.TwitterId)
 	if err != nil {
 		logger.Warnln("failed to get links to user:", err)
 		return userSmartPath

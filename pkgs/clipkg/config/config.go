@@ -11,10 +11,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-////////////////////////////////////////////////////////////////////////////////
-// Configuration Structures
-////////////////////////////////////////////////////////////////////////////////
-
 // Cookie represents authentication cookies for Twitter API
 type Cookie struct {
 	AuthToken string `yaml:"auth_token"`
@@ -28,12 +24,8 @@ type Config struct {
 	MaxDownloadRoutine int    `yaml:"max_download_routine"`
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Configuration Management Functions
-////////////////////////////////////////////////////////////////////////////////
-
-// ReadConfig reads configuration from the specified path
-func ReadConfig(path string) (*Config, error) {
+// ParseConfigFromFile reads configuration from the specified path
+func ParseConfigFromFile(path string) (*Config, error) {
 	file, err := os.OpenFile(path, os.O_RDONLY, 0)
 	if err != nil {
 		return nil, err

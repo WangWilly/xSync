@@ -12,7 +12,6 @@ import (
 	"github.com/WangWilly/xSync/pkgs/downloading"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
-	"github.com/WangWilly/xSync/pkgs/downloading/resolveworker"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -99,7 +98,6 @@ func NewMockDbWorker() *MockDbWorker {
 func (m *MockDbWorker) DownloadTweetMediaFromTweetChanWithDB(
 	ctx context.Context,
 	cancel context.CancelCauseFunc,
-	db *sqlx.DB,
 	tweetDlMetaIn <-chan *dldto.NewEntity,
 	incrementConsumed func(),
 ) []*dldto.NewEntity {
@@ -120,8 +118,6 @@ func (m *MockDbWorker) DownloadTweetMediaFromTweetChanWithDB(
 func (m *MockDbWorker) ProduceFromHeapToTweetChanWithDB(
 	ctx context.Context,
 	cancel context.CancelCauseFunc,
-	heapHelper resolveworker.HeapHelper,
-	db *sqlx.DB,
 	output chan<- *dldto.NewEntity,
 	incrementProduced func(),
 ) ([]*dldto.NewEntity, error) {
@@ -159,14 +155,10 @@ func (m *MockDbWorker) ProduceFromHeapToTweetChanWithDB(
 func TestNewDownloadHelperWithConfig(t *testing.T) {
 	// Test with default config values
 	t.Run("Default config values", func(t *testing.T) {
-		mockDB := &sqlx.DB{}
-		mockHeapHelper := NewMockHeapHelper()
 		mockDbWorker := NewMockDbWorker()
 
 		helper := downloading.NewDownloadHelperWithConfig(
 			downloading.Config{},
-			mockDB,
-			mockHeapHelper,
 			mockDbWorker,
 		)
 
@@ -175,16 +167,12 @@ func TestNewDownloadHelperWithConfig(t *testing.T) {
 
 	// Test with custom config values
 	t.Run("Custom config values", func(t *testing.T) {
-		mockDB := &sqlx.DB{}
-		mockHeapHelper := NewMockHeapHelper()
 		mockDbWorker := NewMockDbWorker()
 
 		helper := downloading.NewDownloadHelperWithConfig(
 			downloading.Config{
 				MaxDownloadRoutine: 42,
 			},
-			mockDB,
-			mockHeapHelper,
 			mockDbWorker,
 		)
 
@@ -193,15 +181,11 @@ func TestNewDownloadHelperWithConfig(t *testing.T) {
 }
 
 func TestBatchDownloadTweetWithDB(t *testing.T) {
-	mockDB := &sqlx.DB{}
-	mockHeapHelper := NewMockHeapHelper()
 	mockDbWorker := NewMockDbWorker()
 
 	// Create helper with test config
 	helper := downloading.NewDownloadHelperWithConfig(
 		downloading.Config{MaxDownloadRoutine: 5},
-		mockDB,
-		mockHeapHelper,
 		mockDbWorker,
 	)
 
@@ -307,15 +291,11 @@ func TestBatchDownloadTweetWithDB(t *testing.T) {
 }
 
 func TestBatchUserDownloadWithDB(t *testing.T) {
-	mockDB := &sqlx.DB{}
-	mockHeapHelper := NewMockHeapHelper()
 	mockDbWorker := NewMockDbWorker()
 
 	// Create helper with test config
 	helper := downloading.NewDownloadHelperWithConfig(
 		downloading.Config{MaxDownloadRoutine: 5},
-		mockDB,
-		mockHeapHelper,
 		mockDbWorker,
 	)
 
