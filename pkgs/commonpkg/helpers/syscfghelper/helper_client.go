@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 
-	"github.com/WangWilly/xSync/pkgs/clipkg/commandline"
 	"github.com/WangWilly/xSync/pkgs/clipkg/config"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/twitterclient"
 	"github.com/gookit/color"
@@ -54,7 +53,7 @@ func (h *helper) GetOtherClients(ctx context.Context) ([]*twitterclient.Client, 
 		return nil, err
 	}
 
-	clients := commandline.BatchLogin(ctx, cookies)
+	clients := batchLogin(ctx, cookies)
 	clientLogFile, err := os.OpenFile(
 		h.workerClientLogFilePath,
 		os.O_TRUNC|os.O_WRONLY|os.O_CREATE,
@@ -69,4 +68,34 @@ func (h *helper) GetOtherClients(ctx context.Context) ([]*twitterclient.Client, 
 	}
 
 	return clients, nil
+}
+
+func batchLogin(ctx context.Context, cookies []*config.Cookie) []*twitterclient.Client {
+	if len(cookies) == 0 {
+		return nil
+	}
+
+	res := make([]*twitterclient.Client, 0, len(cookies))
+	for i, cookie := range cookies {
+		if cookie.AuthToken == "" || cookie.Ct0 == "" {
+			log.Warnf("skipping invalid cookie at index %d: %v", i, cookie)
+			continue
+		}
+
+		client := twitterclient.New()
+		client.SetTwitterIdenty(ctx, cookie.AuthToken, cookie.Ct0)
+		client.SetRateLimit()
+
+		screenName, err := client.GetScreenName(ctx)
+		if err != nil {
+			log.Warnf("failed to get screen name for client %d: %v", i, err)
+			continue
+		}
+
+		log.Infof("logged in as %s with additional cookies at index %d", screenName, i)
+		res = append(res, client)
+	}
+
+	log.Infoln("loaded additional accounts:", len(res))
+	return res
 }

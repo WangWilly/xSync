@@ -40,13 +40,22 @@ func (h *helper) BatchUserDownloadWithDB(ctx context.Context) ([]*dldto.NewEntit
 
 	logger := log.WithField("function", "BatchUserDownloadWithDB")
 
-	simpleWorker := workers.NewSimpleWorker[*dldto.NewEntity](ctx, cancel, h.cfg.MaxDownloadRoutine)
+	simpleWorker := workers.NewSimpleWorker[*dldto.NewEntity](
+		ctx,
+		cancel,
+		h.cfg.MaxDownloadRoutine,
+	)
+
+	////////////////////////////////////////////////////////////////////////////
+
 	producer := func(ctx context.Context, cancel context.CancelCauseFunc, output chan<- *dldto.NewEntity) ([]*dldto.NewEntity, error) {
 		return h.dbWorker.ProduceFromHeapToTweetChanWithDB(ctx, cancel, output, simpleWorker.IncrementProduced)
 	}
 	consumer := func(ctx context.Context, cancel context.CancelCauseFunc, input <-chan *dldto.NewEntity) []*dldto.NewEntity {
 		return h.dbWorker.DownloadTweetMediaFromTweetChanWithDB(ctx, cancel, input, simpleWorker.IncrementConsumed)
 	}
+
+	////////////////////////////////////////////////////////////////////////////
 
 	result := simpleWorker.Process(producer, consumer, h.cfg.MaxDownloadRoutine)
 	logger.
@@ -81,11 +90,19 @@ func (h *helper) BatchDownloadTweetWithDB(ctx context.Context, tweetDlMetas ...*
 
 	logger := log.WithField("function", "BatchDownloadTweetWithDB")
 
-	simpleWorker := workers.NewSimpleWorker[*dldto.NewEntity](ctx, cancel, min(len(tweetDlMetas), h.cfg.MaxDownloadRoutine))
+	simpleWorker := workers.NewSimpleWorker[*dldto.NewEntity](
+		ctx,
+		cancel,
+		min(len(tweetDlMetas), h.cfg.MaxDownloadRoutine),
+	)
+
+	////////////////////////////////////////////////////////////////////////////
+
 	producer := func(ctx context.Context, cancel context.CancelCauseFunc, output chan<- *dldto.NewEntity) ([]*dldto.NewEntity, error) {
 		idx := 0
+
 	tweetDlMetasLoop:
-		for idx := range tweetDlMetas {
+		for idx = range tweetDlMetas {
 			select {
 			case <-ctx.Done():
 				break tweetDlMetasLoop
@@ -93,6 +110,7 @@ func (h *helper) BatchDownloadTweetWithDB(ctx context.Context, tweetDlMetas ...*
 				simpleWorker.IncrementProduced()
 			}
 		}
+
 		var unsent []*dldto.NewEntity
 		for ; idx < len(tweetDlMetas); idx++ {
 			unsent = append(unsent, tweetDlMetas[idx])
@@ -103,7 +121,13 @@ func (h *helper) BatchDownloadTweetWithDB(ctx context.Context, tweetDlMetas ...*
 		return h.dbWorker.DownloadTweetMediaFromTweetChanWithDB(ctx, cancel, input, simpleWorker.IncrementConsumed)
 	}
 
-	result := simpleWorker.Process(producer, consumer, min(len(tweetDlMetas), h.cfg.MaxDownloadRoutine))
+	////////////////////////////////////////////////////////////////////////////
+
+	result := simpleWorker.Process(
+		producer,
+		consumer,
+		min(len(tweetDlMetas), h.cfg.MaxDownloadRoutine),
+	)
 	logger.
 		WithFields(
 			log.Fields{

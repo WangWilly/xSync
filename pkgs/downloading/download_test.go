@@ -12,7 +12,6 @@ import (
 	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/utils"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
-	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -231,7 +230,7 @@ func testSyncUser(t *testing.T, name string, uid int, parentdir string, exist bo
 		t.Errorf("ue.created = false, want true")
 	}
 
-	if err := heaphelper.ExpectNameMustExistOnStorage(ue, name); err != nil {
+	if err := ExpectNameMustExistOnStorage(ue, name); err != nil {
 		t.Error(err)
 		return nil
 	}
@@ -263,7 +262,7 @@ func testSyncList(t *testing.T, name string, lid int, parentDir string, exist bo
 		t.Errorf("ue.created = false, want true")
 	}
 
-	if err := heaphelper.ExpectNameMustExistOnStorage(le, name); err != nil {
+	if err := ExpectNameMustExistOnStorage(le, name); err != nil {
 		t.Error(err)
 		return nil
 	}
@@ -358,4 +357,21 @@ func generateSomeTweets(n int) []*twitterclient.Tweet {
 		res = append(res, tw)
 	}
 	return res
+}
+
+func ExpectNameMustExistOnStorage(path smartpathdto.SmartPath, expectedName string) error {
+	if !path.IsSyncToDb() {
+		return path.Create(expectedName)
+	}
+
+	if path.Name() != expectedName {
+		return path.Rename(expectedName)
+	}
+
+	p, err := path.Path()
+	if err != nil {
+		return err
+	}
+
+	return os.MkdirAll(p, 0755)
 }

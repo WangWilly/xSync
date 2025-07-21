@@ -60,13 +60,7 @@ func New(metas []twitterclient.TitledUserList, smartPathes []*smartpathdto.UserS
 
 	return &helper{
 		uidToUserMap:         uidToUserMap,
-		users:                nil,
 		userSmartPathToDepth: userSmartPathToDepthMap,
-		userRepo:             nil,
-		listRepo:             nil,
-		twitterClientManager: nil,
-		syncedUserSmartPaths: nil,
-		syncedListToUsersMap: nil,
 		heap:                 userUserSmartPathHeap,
 		mtx:                  sync.Mutex{},
 	}, nil

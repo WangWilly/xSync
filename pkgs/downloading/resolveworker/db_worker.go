@@ -300,16 +300,22 @@ func (w *dbWorker) DownloadTweetMediaFromTweetChanWithDB(
 				return failedTweets
 			}
 
-			logger.WithField("tweet", tweetDlMeta.GetTweet().Id).Debug("processing tweet with DB integration")
+			logger.
+				WithField("tweet", tweetDlMeta.GetTweet().Id).
+				Debug("processing tweet with DB integration")
+
 			err := w.downloadTweetMediaWithDB(ctx, tweetDlMeta, logger)
 			incrementConsumed()
-
 			if err == nil {
-				logger.WithField("tweet", tweetDlMeta.GetTweet().Id).Debug("downloaded tweet successfully")
+				logger.
+					WithField("tweet", tweetDlMeta.GetTweet().Id).
+					Debug("downloaded tweet successfully")
 				continue
 			}
 
-			logger.WithField("tweet", tweetDlMeta.GetTweet().Id).Errorf("failed to download tweet: %v", err)
+			logger.
+				WithField("tweet", tweetDlMeta.GetTweet().Id).
+				Errorf("failed to download tweet: %v", err)
 			failedTweets = append(failedTweets, tweetDlMeta)
 
 			// Cancel context and exit if critical errors occur
@@ -325,9 +331,13 @@ func (w *dbWorker) DownloadTweetMediaFromTweetChanWithDB(
 				incrementConsumed()
 				drainedCount++
 				failedTweets = append(failedTweets, pt)
-				logger.WithField("tweet", pt.GetTweet().Id).Debug("added drained tweet to failed list")
+				logger.
+					WithField("tweet", pt.GetTweet().Id).
+					Debug("added drained tweet to failed list")
 			}
-			logger.WithField("drainedCount", drainedCount).Debug("finished draining tweets due to context cancellation")
+			logger.
+				WithField("drainedCount", drainedCount).
+				Debug("finished draining tweets due to context cancellation")
 			return failedTweets
 		}
 	}
