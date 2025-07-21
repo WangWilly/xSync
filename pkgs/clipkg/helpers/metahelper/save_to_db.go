@@ -1,4 +1,4 @@
-package downloading
+package metahelper
 
 import (
 	"context"
@@ -8,33 +8,28 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (h *helper) saveToDb(ctx context.Context, metas []*twitterclient.TitledUserList) error {
+func (h *helper) SaveToDb(ctx context.Context, metas []twitterclient.TitledUserList) error {
 	logger := log.WithField("function", "SaveToDb")
 	logger.Infoln("saving entities to database")
 
 	for _, meta := range metas {
-		if meta == nil {
-			logger.Warnln("skipping nil meta")
-			continue
-		}
-
 		switch meta.Type {
 		case twitterclient.TITLED_TYPE_TWITTER_USER:
-			if err := h.SaveUserToDb(ctx, meta.BelongsTo); err != nil {
+			if err := h.saveUserToDb(ctx, meta.BelongsTo); err != nil {
 				return err
 			}
 		case twitterclient.TITLED_TYPE_TWITTER_LIST:
-			if err := h.SaveListToDb(ctx, meta); err != nil {
+			if err := h.saveListToDb(ctx, &meta); err != nil {
 				return err
 			}
 			for _, user := range meta.Users {
-				if err := h.SaveUserToDb(ctx, user); err != nil {
+				if err := h.saveUserToDb(ctx, user); err != nil {
 					return err
 				}
 			}
 		case twitterclient.TITLED_TYPE_TWITTER_FOLLOWERS:
 			for _, user := range meta.Users {
-				if err := h.SaveUserToDb(ctx, user); err != nil {
+				if err := h.saveUserToDb(ctx, user); err != nil {
 					return err
 				}
 			}
@@ -48,7 +43,7 @@ func (h *helper) saveToDb(ctx context.Context, metas []*twitterclient.TitledUser
 	return nil
 }
 
-func (h *helper) SaveUserToDb(ctx context.Context, user *twitterclient.User) error {
+func (h *helper) saveUserToDb(ctx context.Context, user *twitterclient.User) error {
 	logger := log.WithField("function", "SaveUserToDb")
 
 	if user == nil {
@@ -78,7 +73,7 @@ func (h *helper) SaveUserToDb(ctx context.Context, user *twitterclient.User) err
 	return nil
 }
 
-func (h *helper) SaveListToDb(ctx context.Context, list *twitterclient.TitledUserList) error {
+func (h *helper) saveListToDb(ctx context.Context, list *twitterclient.TitledUserList) error {
 	logger := log.WithField("function", "SaveListToDb")
 
 	if list == nil {

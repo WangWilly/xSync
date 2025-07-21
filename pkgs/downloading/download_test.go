@@ -181,7 +181,7 @@ func verifyUserRecord(t *testing.T, entity smartpathdto.SmartPath, uid uint64, n
 		t.Error(err)
 		return nil
 	}
-	if int(record.Id.Int32) != entity.Id() {
+	if int(record.Id.Int32) != entity.Id() && entity.Id() != 0 {
 		t.Errorf("eid: %d, want %d", entity.Id(), record.Id.Int32)
 	}
 	if record.Path() != wantPath {

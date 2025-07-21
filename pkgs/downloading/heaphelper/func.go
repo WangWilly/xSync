@@ -16,16 +16,11 @@ type userSmartPathToDepthMap map[*smartpathdto.UserSmartPath]int
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func New(metas []*twitterclient.TitledUserList, smartPathes []*smartpathdto.UserSmartPath) (*helper, error) {
+func New(metas []twitterclient.TitledUserList, smartPathes []*smartpathdto.UserSmartPath) (*helper, error) {
 	logger := log.WithField("function", "NewHeapHelper")
 
 	uidToUserMap := make(map[uint64]*twitterclient.User)
 	for _, meta := range metas {
-		if meta == nil {
-			logger.Warnln("skipping nil meta")
-			continue
-		}
-
 		for _, user := range meta.Users {
 			if user == nil {
 				logger.Warnln("skipping nil user in meta", meta.Type)

@@ -1,4 +1,4 @@
-package downloading
+package metahelper
 
 import (
 	"context"
@@ -8,19 +8,14 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (h *helper) toUserSmartPaths(
+func (h *helper) ToUserSmartPaths(
 	ctx context.Context,
-	metas []*twitterclient.TitledUserList,
+	metas []twitterclient.TitledUserList,
 ) []*smartpathdto.UserSmartPath {
-	logger := log.WithField("caller", "toUserSmartPaths")
+	logger := log.WithField("caller", "ToUserSmartPaths")
 
 	res := make([]*smartpathdto.UserSmartPath, 0)
 	for _, meta := range metas {
-		if meta == nil {
-			logger.Warnln("skipping nil meta")
-			continue
-		}
-
 		for _, user := range meta.Users {
 			if user == nil {
 				logger.Warnln("skipping nil user in meta", meta.Type)

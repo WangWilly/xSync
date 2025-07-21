@@ -27,7 +27,7 @@ func (r *Repo) CreateLink(db *sqlx.DB, lnk *model.UserLink) error {
 	return nil
 }
 
-func UpsertLink(db *sqlx.DB, lnk *model.UserLink) error {
+func (r *Repo) UpsertLink(db *sqlx.DB, lnk *model.UserLink) error {
 	stmt := `INSERT INTO user_links(user_id, name, parent_lst_entity_id, storage_saved)
 			VALUES(:user_id, :name, :parent_lst_entity_id, :storage_saved)
 			ON CONFLICT(user_id, parent_lst_entity_id) DO UPDATE SET name = :name, storage_saved = :storage_saved, updated_at=CURRENT_TIMESTAMP

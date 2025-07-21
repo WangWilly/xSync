@@ -1,4 +1,4 @@
-package downloading
+package metahelper
 
 import (
 	"context"
@@ -11,29 +11,25 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (h *helper) saveToStorage(ctx context.Context, rootDir string, metas []*twitterclient.TitledUserList) error {
+func (h *helper) SaveToStorage(ctx context.Context, rootDir string, metas []twitterclient.TitledUserList) error {
 	for _, meta := range metas {
-		if meta == nil {
-			continue
-		}
-
 		switch meta.Type {
 		case twitterclient.TITLED_TYPE_TWITTER_USER:
-			if err := h.SaveUserToStorage(ctx, rootDir, meta.BelongsTo); err != nil {
+			if err := h.saveUserToStorage(ctx, rootDir, meta.BelongsTo); err != nil {
 				return err
 			}
 		case twitterclient.TITLED_TYPE_TWITTER_LIST:
-			if err := h.SaveListToStorage(ctx, rootDir, meta); err != nil {
+			if err := h.saveListToStorage(ctx, rootDir, &meta); err != nil {
 				return err
 			}
 			for _, user := range meta.Users {
-				if err := h.SaveUserToStorage(ctx, rootDir, user); err != nil {
+				if err := h.saveUserToStorage(ctx, rootDir, user); err != nil {
 					return err
 				}
 			}
 		case twitterclient.TITLED_TYPE_TWITTER_FOLLOWERS:
 			for _, user := range meta.Users {
-				if err := h.SaveUserToStorage(ctx, rootDir, user); err != nil {
+				if err := h.saveUserToStorage(ctx, rootDir, user); err != nil {
 					return err
 				}
 			}
@@ -45,7 +41,7 @@ func (h *helper) saveToStorage(ctx context.Context, rootDir string, metas []*twi
 	return nil
 }
 
-func (h *helper) SaveUserToStorage(ctx context.Context, rootDir string, user *twitterclient.User) error {
+func (h *helper) saveUserToStorage(ctx context.Context, rootDir string, user *twitterclient.User) error {
 	logger := log.WithField("function", "SaveUserToStorage")
 
 	if user == nil {
@@ -82,7 +78,7 @@ func (h *helper) SaveUserToStorage(ctx context.Context, rootDir string, user *tw
 	return nil
 }
 
-func (h *helper) SaveListToStorage(ctx context.Context, rootDir string, list *twitterclient.TitledUserList) error {
+func (h *helper) saveListToStorage(ctx context.Context, rootDir string, list *twitterclient.TitledUserList) error {
 	logger := log.WithField("function", "SaveListToStorage")
 
 	if list == nil {

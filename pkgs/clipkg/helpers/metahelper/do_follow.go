@@ -1,4 +1,4 @@
-package downloading
+package metahelper
 
 import (
 	"context"
@@ -7,18 +7,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (h *helper) doFollow(ctx context.Context, metas []*twitterclient.TitledUserList) {
+func (h *helper) DoFollow(ctx context.Context, metas []twitterclient.TitledUserList) {
 	logger := log.
 		WithField("caller", "downloading.doFollow")
 
 	client := h.twitterClientManager.GetMasterClient()
 
 	for _, meta := range metas {
-		if meta == nil {
-			logger.Warnln("doFollow: meta or meta.User is nil, skipping")
-			continue
-		}
-
 		for _, user := range meta.Users {
 			if user == nil {
 				logger.Warnln("doFollow: user is nil, skipping")

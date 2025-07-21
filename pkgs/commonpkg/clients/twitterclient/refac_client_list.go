@@ -30,6 +30,18 @@ type TitledUserList struct {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+func NewTitledUserListByUser(user *User) *TitledUserList {
+	return &TitledUserList{
+		Type:        TITLED_TYPE_TWITTER_USER,
+		Id:          user.TwitterId,
+		Title:       fmt.Sprintf("%s(%s)", user.Name, user.ScreenName),
+		Users:       []*User{user},
+		BelongsTo:   user,
+		TwitterName: user.Name,
+	}
+}
+
+// Deprecated: Use NewTitledUserList instead.
 func NewTulByTwitterUserId(ctx context.Context, client *Client, userId uint64) (*TitledUserList, error) {
 	user, err := client.GetUserById(ctx, userId)
 	if err != nil {
@@ -46,6 +58,7 @@ func NewTulByTwitterUserId(ctx context.Context, client *Client, userId uint64) (
 	}, nil
 }
 
+// Deprecated: Use NewTitledUserList instead.
 func NewTulByTwitterUserName(ctx context.Context, client *Client, screenName string) (*TitledUserList, error) {
 	user, err := client.GetUserByScreenName(ctx, screenName)
 	if err != nil {
@@ -63,6 +76,26 @@ func NewTulByTwitterUserName(ctx context.Context, client *Client, screenName str
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+// TODO:
+func NewTulByRawListByteAndMembers(gjson *gjson.Result, members []*User) (*TitledUserList, error) {
+	user_results := gjson.Get("user_results")
+	creator, err := parseUserJsonForNewTulByTwitterListId(&user_results)
+	if err != nil {
+		return nil, err
+	}
+	id_str := gjson.Get("id_str")
+	name := gjson.Get("name")
+
+	return &TitledUserList{
+		Type:        TITLED_TYPE_TWITTER_LIST,
+		Id:          id_str.Uint(),
+		Title:       fmt.Sprintf("%s(%d)", name.String(), id_str.Uint()),
+		Users:       members,
+		BelongsTo:   creator,
+		TwitterName: name.String(),
+	}, nil
+}
 
 func NewTulByTwitterListId(ctx context.Context, client *Client, listId uint64) (*TitledUserList, error) {
 	gjson, err := client.GetRawListByteById(ctx, listId)
@@ -135,6 +168,17 @@ func parseUserJsonForNewTulByTwitterListId(userJson *gjson.Result) (*User, error
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+func NewTulByUserAndFollowers(user *User, followers []*User) *TitledUserList {
+	return &TitledUserList{
+		Type:        TITLED_TYPE_TWITTER_FOLLOWERS,
+		Id:          user.TwitterId,
+		Title:       fmt.Sprintf("%s(%s)", user.Name, user.ScreenName),
+		Users:       followers,
+		BelongsTo:   user,
+		TwitterName: user.Name,
+	}
+}
 
 func NewTulByTwitterFollowingUserId(ctx context.Context, client *Client, userId uint64) (*TitledUserList, error) {
 	user, err := client.GetUserById(ctx, userId)
