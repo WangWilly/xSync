@@ -51,7 +51,7 @@ func (h *helper) saveUserToDb(ctx context.Context, user *twitterclient.User) err
 		return nil
 	}
 
-	if err := h.userRepo.CreatePreviousName(
+	if err := h.previousNameRepo.Create(
 		ctx,
 		h.db,
 		user.TwitterId,

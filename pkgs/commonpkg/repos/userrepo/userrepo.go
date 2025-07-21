@@ -11,15 +11,15 @@ import (
 
 ////////////////////////////////////////////////////////////////////////////////
 
-type Repo struct{}
+type repo struct{}
 
-func New() *Repo {
-	return &Repo{}
+func New() *repo {
+	return &repo{}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Create(ctx context.Context, db *sqlx.DB, usr *model.User) error {
+func (r *repo) Create(ctx context.Context, db *sqlx.DB, usr *model.User) error {
 	stmt := `INSERT INTO users(id, screen_name, name, protected, friends_count) 
 			VALUES(:id, :screen_name, :name, :protected, :friends_count)
 			RETURNING id, screen_name, name, protected, friends_count, created_at, updated_at`
@@ -38,7 +38,7 @@ func (r *Repo) Create(ctx context.Context, db *sqlx.DB, usr *model.User) error {
 	return nil
 }
 
-func (r *Repo) Upsert(ctx context.Context, db *sqlx.DB, usr *model.User) error {
+func (r *repo) Upsert(ctx context.Context, db *sqlx.DB, usr *model.User) error {
 	stmt := `INSERT INTO users(id, screen_name, name, protected, friends_count) VALUES(:id, :screen_name, :name, :protected, :friends_count)
 			ON CONFLICT(id) DO UPDATE SET screen_name=:screen_name, name=:name, protected=:protected, friends_count=:friends_count, updated_at=CURRENT_TIMESTAMP
 			RETURNING id, screen_name, name, protected, friends_count, created_at, updated_at`
@@ -59,7 +59,7 @@ func (r *Repo) Upsert(ctx context.Context, db *sqlx.DB, usr *model.User) error {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) GetById(ctx context.Context, db *sqlx.DB, uid uint64) (*model.User, error) {
+func (r *repo) GetById(ctx context.Context, db *sqlx.DB, uid uint64) (*model.User, error) {
 	stmt := `SELECT * FROM users WHERE id=$1`
 	result := &model.User{}
 	err := db.GetContext(ctx, result, stmt, uid)
@@ -75,7 +75,7 @@ func (r *Repo) GetById(ctx context.Context, db *sqlx.DB, uid uint64) (*model.Use
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Update(ctx context.Context, db *sqlx.DB, usr *model.User) error {
+func (r *repo) Update(ctx context.Context, db *sqlx.DB, usr *model.User) error {
 	stmt := `UPDATE users SET screen_name=:screen_name, name=:name, protected=:protected, friends_count=:friends_count, updated_at=CURRENT_TIMESTAMP WHERE id=:id`
 	_, err := db.NamedExecContext(ctx, stmt, usr)
 	return err
@@ -83,23 +83,8 @@ func (r *Repo) Update(ctx context.Context, db *sqlx.DB, usr *model.User) error {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Delete(ctx context.Context, db *sqlx.DB, uid uint64) error {
+func (r *repo) Delete(ctx context.Context, db *sqlx.DB, uid uint64) error {
 	stmt := `DELETE FROM users WHERE id=$1`
 	_, err := db.ExecContext(ctx, stmt, uid)
-	return err
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-// TODO:
-func (r *Repo) CreatePreviousName(
-	ctx context.Context,
-	db *sqlx.DB,
-	uid uint64,
-	name string,
-	screenName string,
-) error {
-	stmt := `INSERT INTO user_previous_names(uid, screen_name, name) VALUES($1, $2, $3)`
-	_, err := db.ExecContext(ctx, stmt, uid, screenName, name)
 	return err
 }

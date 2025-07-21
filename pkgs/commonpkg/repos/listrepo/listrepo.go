@@ -11,15 +11,15 @@ import (
 
 ////////////////////////////////////////////////////////////////////////////////
 
-type Repo struct{}
+type repo struct{}
 
-func New() *Repo {
-	return &Repo{}
+func New() *repo {
+	return &repo{}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Create(ctx context.Context, db *sqlx.DB, lst *model.List) error {
+func (r *repo) Create(ctx context.Context, db *sqlx.DB, lst *model.List) error {
 	stmt := `INSERT INTO lsts(id, name, owner_uid) 
 			VALUES(:id, :name, :owner_uid)
 			RETURNING id, name, owner_uid, created_at, updated_at`
@@ -38,7 +38,7 @@ func (r *Repo) Create(ctx context.Context, db *sqlx.DB, lst *model.List) error {
 	return nil
 }
 
-func (r *Repo) Upsert(ctx context.Context, db *sqlx.DB, lst *model.List) error {
+func (r *repo) Upsert(ctx context.Context, db *sqlx.DB, lst *model.List) error {
 	stmt := `INSERT INTO lsts(id, name, owner_uid)
 			VALUES(:id, :name, :owner_uid)
 			ON CONFLICT(id) DO UPDATE SET name=:name, updated_at=CURRENT_TIMESTAMP
@@ -60,7 +60,7 @@ func (r *Repo) Upsert(ctx context.Context, db *sqlx.DB, lst *model.List) error {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) GetById(ctx context.Context, db *sqlx.DB, lid uint64) (*model.List, error) {
+func (r *repo) GetById(ctx context.Context, db *sqlx.DB, lid uint64) (*model.List, error) {
 	stmt := `SELECT * FROM lsts WHERE id = $1`
 	result := &model.List{}
 	err := db.Get(result, stmt, lid)
@@ -75,7 +75,7 @@ func (r *Repo) GetById(ctx context.Context, db *sqlx.DB, lid uint64) (*model.Lis
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Delete(ctx context.Context, db *sqlx.DB, lid uint64) error {
+func (r *repo) Delete(ctx context.Context, db *sqlx.DB, lid uint64) error {
 	stmt := `DELETE FROM lsts WHERE id=$1`
 	_, err := db.ExecContext(ctx, stmt, lid)
 	return err
@@ -83,7 +83,7 @@ func (r *Repo) Delete(ctx context.Context, db *sqlx.DB, lid uint64) error {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Update(ctx context.Context, db *sqlx.DB, lst *model.List) error {
+func (r *repo) Update(ctx context.Context, db *sqlx.DB, lst *model.List) error {
 	stmt := `UPDATE lsts SET name=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`
 	_, err := db.ExecContext(ctx, stmt, lst.Name, lst.Id)
 	return err

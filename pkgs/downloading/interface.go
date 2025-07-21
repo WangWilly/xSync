@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/twitterclient"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/utils"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
@@ -20,4 +21,8 @@ type HeapHelper interface {
 type DbWorker interface {
 	ProduceFromHeapToTweetChanWithDB(ctx context.Context, cancel context.CancelCauseFunc, output chan<- *dldto.NewEntity, incrementProduced func()) ([]*dldto.NewEntity, error)
 	DownloadTweetMediaFromTweetChanWithDB(ctx context.Context, cancel context.CancelCauseFunc, tweetDlMetaIn <-chan *dldto.NewEntity, incrementConsumed func()) []*dldto.NewEntity
+}
+
+type UserEntityRepo interface {
+	GetById(ctx context.Context, db *sqlx.DB, id int) (*model.UserEntity, error)
 }

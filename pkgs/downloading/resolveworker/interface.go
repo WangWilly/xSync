@@ -22,9 +22,9 @@ type HeapHelper interface {
 	GetUserByTwitterId(twitterId uint64) *twitterclient.User
 }
 
-type UserRepo interface {
-	UpdateEntityMediaCount(ctx context.Context, db *sqlx.DB, eid int, count int) error
-	UpdateEntityTweetStat(ctx context.Context, db *sqlx.DB, eid int, baseline time.Time, count int) error
+type UserEntityRepo interface {
+	UpdateMediaCount(ctx context.Context, db *sqlx.DB, eid int, count int) error
+	UpdateTweetStat(ctx context.Context, db *sqlx.DB, eid int, baseline time.Time, count int) error
 }
 
 type TweetRepo interface {

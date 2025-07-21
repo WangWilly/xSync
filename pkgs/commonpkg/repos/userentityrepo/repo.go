@@ -1,4 +1,4 @@
-package userrepo
+package userentityrepo
 
 import (
 	"context"
@@ -11,7 +11,15 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-func (r *Repo) CreateEntity(ctx context.Context, db *sqlx.DB, entity *model.UserEntity) error {
+type repo struct{}
+
+func New() *repo {
+	return &repo{}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+func (r *repo) Create(ctx context.Context, db *sqlx.DB, entity *model.UserEntity) error {
 	abs, err := filepath.Abs(entity.ParentDir)
 	if err != nil {
 		return err
@@ -37,7 +45,7 @@ func (r *Repo) CreateEntity(ctx context.Context, db *sqlx.DB, entity *model.User
 	return nil
 }
 
-func (r *Repo) UpsertEntity(ctx context.Context, db *sqlx.DB, entity *model.UserEntity) error {
+func (r *repo) Upsert(ctx context.Context, db *sqlx.DB, entity *model.UserEntity) error {
 	abs, err := filepath.Abs(entity.ParentDir)
 	if err != nil {
 		return err
@@ -65,14 +73,15 @@ func (r *Repo) UpsertEntity(ctx context.Context, db *sqlx.DB, entity *model.User
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) GetEntity(ctx context.Context, db *sqlx.DB, uid uint64, parentDir string) (*model.UserEntity, error) {
+func (r *repo) Get(ctx context.Context, db *sqlx.DB, uid uint64, parentDir string) (*model.UserEntity, error) {
 	parentDir, err := filepath.Abs(parentDir)
 	if err != nil {
 		return nil, err
 	}
 
-	stmt := `SELECT * FROM user_entities WHERE user_id=? AND parent_dir=?`
 	result := &model.UserEntity{}
+
+	stmt := `SELECT * FROM user_entities WHERE user_id=? AND parent_dir=?`
 	err = db.GetContext(ctx, result, stmt, uid, parentDir)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -84,9 +93,10 @@ func (r *Repo) GetEntity(ctx context.Context, db *sqlx.DB, uid uint64, parentDir
 	return result, nil
 }
 
-func (r *Repo) GetEntityById(ctx context.Context, db *sqlx.DB, id int) (*model.UserEntity, error) {
-	stmt := `SELECT * FROM user_entities WHERE id=?`
+func (r *repo) GetById(ctx context.Context, db *sqlx.DB, id int) (*model.UserEntity, error) {
 	result := &model.UserEntity{}
+
+	stmt := `SELECT * FROM user_entities WHERE id=?`
 	err := db.GetContext(ctx, result, stmt, id)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -98,7 +108,7 @@ func (r *Repo) GetEntityById(ctx context.Context, db *sqlx.DB, id int) (*model.U
 	return result, nil
 }
 
-func (r *Repo) GetEntityByTwitterId(ctx context.Context, db *sqlx.DB, twitterId uint64) (*model.UserEntity, error) {
+func (r *repo) GetByTwitterId(ctx context.Context, db *sqlx.DB, twitterId uint64) (*model.UserEntity, error) {
 	stmt := `SELECT * FROM user_entities WHERE user_id=?`
 	result := &model.UserEntity{}
 	err := db.GetContext(ctx, result, stmt, twitterId)
@@ -114,7 +124,7 @@ func (r *Repo) GetEntityByTwitterId(ctx context.Context, db *sqlx.DB, twitterId 
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) UpdateEntity(ctx context.Context, db *sqlx.DB, entity *model.UserEntity) error {
+func (r *repo) Update(ctx context.Context, db *sqlx.DB, entity *model.UserEntity) error {
 	stmt := `UPDATE user_entities 
 			SET 
 				name=:name,
@@ -143,33 +153,36 @@ func (r *Repo) UpdateEntity(ctx context.Context, db *sqlx.DB, entity *model.User
 	return nil
 }
 
-func (r *Repo) UpdateEntityMediaCount(ctx context.Context, db *sqlx.DB, eid int, count int) error {
-	stmt := `UPDATE user_entities SET media_count=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`
+func (r *repo) UpdateTweetStat(ctx context.Context, db *sqlx.DB, eid int, latest_release_time time.Time, count int) error {
+	stmt := `UPDATE user_entities
+			 SET latest_release_time=?, media_count=?, updated_at=CURRENT_TIMESTAMP
+			 WHERE id=?
+			`
+	_, err := db.ExecContext(ctx, stmt, latest_release_time, count, eid)
+	return err
+}
+
+func (r *repo) UpdateMediaCount(ctx context.Context, db *sqlx.DB, eid int, count int) error {
+	stmt := `UPDATE user_entities
+			 SET media_count=?, updated_at=CURRENT_TIMESTAMP
+			 WHERE id=?
+			`
 	_, err := db.ExecContext(ctx, stmt, count, eid)
 	return err
 }
 
-func (r *Repo) UpdateEntityTweetStat(ctx context.Context, db *sqlx.DB, eid int, baseline time.Time, count int) error {
-	stmt := `UPDATE user_entities SET latest_release_time=?, media_count=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`
-	_, err := db.ExecContext(ctx, stmt, baseline, count, eid)
-	return err
-}
-
-func (r *Repo) UpdateEntityStorageSavedByTwitterId(ctx context.Context, db *sqlx.DB, twitterId uint64, saved bool) error {
-	stmt := `UPDATE user_entities SET storage_saved=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?`
+func (r *repo) UpdateStorageSavedByTwitterId(ctx context.Context, db *sqlx.DB, twitterId uint64, saved bool) error {
+	stmt := `UPDATE user_entities
+			 SET storage_saved=?, updated_at=CURRENT_TIMESTAMP
+			 WHERE user_id=?
+			`
 	_, err := db.ExecContext(ctx, stmt, saved, twitterId)
-	return err
-}
-
-func (r *Repo) SetEntityLatestReleaseTime(ctx context.Context, db *sqlx.DB, id int, t time.Time) error {
-	stmt := `UPDATE user_entities SET latest_release_time=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`
-	_, err := db.ExecContext(ctx, stmt, t, id)
 	return err
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) DeleteEntity(ctx context.Context, db *sqlx.DB, id uint32) error {
+func (r *repo) Delete(ctx context.Context, db *sqlx.DB, id uint32) error {
 	stmt := `DELETE FROM user_entities WHERE id=?`
 	_, err := db.ExecContext(ctx, stmt, id)
 	return err

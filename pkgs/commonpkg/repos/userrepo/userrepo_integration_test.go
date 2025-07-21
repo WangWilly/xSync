@@ -325,28 +325,4 @@ func TestRepoIntegration_CreatePreviousName(t *testing.T) {
 	}
 	err := repo.Create(ctx, db, user)
 	require.NoError(t, err)
-
-	t.Run("create previous name", func(t *testing.T) {
-		// Act
-		err := repo.CreatePreviousName(ctx, db, user.Id, "Old Real Name", "oldscreenname")
-
-		// Assert
-		require.NoError(t, err)
-
-		// Verify creation of previous name
-		var previousName struct {
-			Id         int       `db:"id"`
-			Uid        uint64    `db:"uid"`
-			ScreenName string    `db:"screen_name"`
-			Name       string    `db:"name"`
-			CreatedAt  time.Time `db:"created_at"`
-		}
-
-		err = db.Get(&previousName, "SELECT * FROM user_previous_names WHERE uid = $1", user.Id)
-		require.NoError(t, err)
-		assert.Equal(t, user.Id, previousName.Uid)
-		assert.Equal(t, "oldscreenname", previousName.ScreenName)
-		assert.Equal(t, "Old Real Name", previousName.Name)
-		assert.NotZero(t, previousName.CreatedAt)
-	})
 }

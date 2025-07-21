@@ -1,4 +1,4 @@
-package listrepo
+package listentityrepo
 
 import (
 	"context"
@@ -10,7 +10,15 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-func (r *Repo) CreateEntity(ctx context.Context, db *sqlx.DB, entity *model.ListEntity) error {
+type repo struct{}
+
+func New() *repo {
+	return &repo{}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+func (r *repo) Create(ctx context.Context, db *sqlx.DB, entity *model.ListEntity) error {
 	abs, err := filepath.Abs(entity.ParentDir)
 	if err != nil {
 		return err
@@ -35,7 +43,7 @@ func (r *Repo) CreateEntity(ctx context.Context, db *sqlx.DB, entity *model.List
 	return nil
 }
 
-func (r *Repo) UpsertEntity(ctx context.Context, db *sqlx.DB, entity *model.ListEntity) error {
+func (r *repo) Upsert(ctx context.Context, db *sqlx.DB, entity *model.ListEntity) error {
 	abs, err := filepath.Abs(entity.ParentDir)
 	if err != nil {
 		return err
@@ -63,7 +71,7 @@ func (r *Repo) UpsertEntity(ctx context.Context, db *sqlx.DB, entity *model.List
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) GetEntityById(ctx context.Context, db *sqlx.DB, id int) (*model.ListEntity, error) {
+func (r *repo) GetById(ctx context.Context, db *sqlx.DB, id int) (*model.ListEntity, error) {
 	stmt := `SELECT * FROM lst_entities WHERE id=?`
 	result := &model.ListEntity{}
 	err := db.GetContext(ctx, result, stmt, id)
@@ -77,7 +85,7 @@ func (r *Repo) GetEntityById(ctx context.Context, db *sqlx.DB, id int) (*model.L
 	return result, nil
 }
 
-func (r *Repo) GetEntity(ctx context.Context, db *sqlx.DB, lid int64, parentDir string) (*model.ListEntity, error) {
+func (r *repo) Get(ctx context.Context, db *sqlx.DB, lid int64, parentDir string) (*model.ListEntity, error) {
 	parentDir, err := filepath.Abs(parentDir)
 	if err != nil {
 		return nil, err
@@ -98,7 +106,7 @@ func (r *Repo) GetEntity(ctx context.Context, db *sqlx.DB, lid int64, parentDir 
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) UpdateEntity(ctx context.Context, db *sqlx.DB, entity *model.ListEntity) error {
+func (r *repo) Update(ctx context.Context, db *sqlx.DB, entity *model.ListEntity) error {
 	stmt := `UPDATE lst_entities
 			 SET
 			 	name=:name,
@@ -124,7 +132,7 @@ func (r *Repo) UpdateEntity(ctx context.Context, db *sqlx.DB, entity *model.List
 	return nil
 }
 
-func (r *Repo) UpdateEntityStorageSavedByTwitterId(ctx context.Context, db *sqlx.DB, twitterId uint64, saved bool) error {
+func (r *repo) UpdateStorageSavedByTwitterId(ctx context.Context, db *sqlx.DB, twitterId uint64, saved bool) error {
 	stmt := `UPDATE lst_entities SET storage_saved=?, updated_at=CURRENT_TIMESTAMP WHERE lst_id=?`
 	_, err := db.ExecContext(ctx, stmt, saved, twitterId)
 	return err
@@ -132,7 +140,7 @@ func (r *Repo) UpdateEntityStorageSavedByTwitterId(ctx context.Context, db *sqlx
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) DeleteEntity(ctx context.Context, db *sqlx.DB, id int) error {
+func (r *repo) Delete(ctx context.Context, db *sqlx.DB, id int) error {
 	stmt := `DELETE FROM lst_entities WHERE id=?`
 	_, err := db.ExecContext(ctx, stmt, id)
 	return err

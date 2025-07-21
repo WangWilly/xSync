@@ -23,6 +23,6 @@ func (pt NewEntity) GetPath() string {
 	return path
 }
 
-func (pt NewEntity) GetUserSmartPath() smartpathdto.SmartPath {
+func (pt NewEntity) GetUserSmartPath() *smartpathdto.UserSmartPath {
 	return pt.Entity
 }

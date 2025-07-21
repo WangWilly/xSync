@@ -13,7 +13,7 @@ import (
 	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/mediarepo"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/tweetrepo"
-	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/userrepo"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/userentityrepo"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/utils"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
@@ -30,9 +30,9 @@ type dbWorker struct {
 	twitterClientManager *twitterclient.Manager
 	heapHelper           HeapHelper
 
-	userRepo  UserRepo
-	tweetRepo TweetRepo
-	mediaRepo MediaRepo
+	userEntityRepo UserEntityRepo
+	tweetRepo      TweetRepo
+	mediaRepo      MediaRepo
 }
 
 func NewDBWorker(
@@ -45,7 +45,7 @@ func NewDBWorker(
 		pushTimeout:          120 * time.Second,
 		twitterClientManager: twitterClientManager,
 		heapHelper:           heapHelper,
-		userRepo:             userrepo.New(),
+		userEntityRepo:       userentityrepo.New(),
 		tweetRepo:            tweetrepo.New(),
 		mediaRepo:            mediarepo.New(),
 	}
@@ -131,7 +131,9 @@ func (w *dbWorker) fetchTweetOrFallbackToHeapWithDB(
 		return nil
 	}
 
-	logger.WithField("user", entity.Name()).Infof("latest release time: %s", entity.LatestReleaseTime())
+	logger.
+		WithField("user", entity.Name()).
+		Infof("latest release time: %s", entity.LatestReleaseTime())
 	client := w.twitterClientManager.GetMasterClient()
 	if client == nil {
 		safePushToHeap("no client available")
@@ -169,7 +171,7 @@ func (w *dbWorker) fetchTweetOrFallbackToHeapWithDB(
 
 	if len(tweets) == 0 {
 		logger.WithField("user", entity.Name()).Infoln("no tweets found, updating user medias count")
-		if err := w.userRepo.UpdateEntityMediaCount(
+		if err := w.userEntityRepo.UpdateMediaCount(
 			ctx,
 			w.db,
 			entity.Id(),
@@ -214,7 +216,7 @@ tweetLoop:
 	}
 
 	logger.WithField("user", entity.Name()).Infoln("updating user medias count in database")
-	if err := w.userRepo.UpdateEntityTweetStat(
+	if err := w.userEntityRepo.UpdateTweetStat(
 		ctx,
 		w.db,
 		entity.Id(),
