@@ -46,3 +46,7 @@ func (sm *SyncMap[K, V]) Range() []MapRange[K, V] {
 	})
 	return result
 }
+
+func (sm *SyncMap[K, V]) Delete(key K) {
+	sm.sm.Delete(key)
+}

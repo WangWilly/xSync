@@ -1,6 +1,6 @@
 package twitterclient
 
-func (m *Manager) GetRateLimiter(cli *Client) *rateLimiter {
+func (m *Manager) GetRateLimiter(cli *Client) *rateLimitManager {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 

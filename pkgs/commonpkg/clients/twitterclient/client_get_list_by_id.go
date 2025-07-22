@@ -21,19 +21,6 @@ func (c *Client) GetRawListByteById(ctx context.Context, listId uint64) (*gjson.
 	return c.getRawListByteById(ctx, GRAPHQL_LIST_BY_REST_ID, listId)
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-// Deprecated: List will be removed in future versions
-//
-// GetList retrieves a Twitter list by its ID
-func (c *Client) GetList(ctx context.Context, listId uint64) (*List, error) {
-	gjson, err := c.getRawListByteById(ctx, GRAPHQL_LIST_BY_REST_ID, listId)
-	if err != nil {
-		return nil, err
-	}
-	return c.parseList(gjson)
-}
-
 func (c *Client) getRawListByteById(ctx context.Context, path string, listId uint64) (*gjson.Result, error) {
 	u, _ := url.Parse(API_HOST)
 	u = u.JoinPath(path)

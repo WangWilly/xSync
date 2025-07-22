@@ -15,42 +15,57 @@ import (
 )
 
 type TweetDumper struct {
+	db             *sqlx.DB
 	userEntityRepo UserEntityRepo
 
-	data  map[int][]*twitterclient.Tweet
-	set   map[int]map[uint64]struct{}
-	count int
+	userTweetsMap   map[int][]*twitterclient.Tweet
+	usersTweetIdSet map[int]map[uint64]struct{}
+	count           int
 }
 
-func NewDumper() *TweetDumper {
+func NewDumper(db *sqlx.DB) *TweetDumper {
 	td := TweetDumper{
-		userEntityRepo: userentityrepo.New(),
+		db:              db,
+		userEntityRepo:  userentityrepo.New(),
+		userTweetsMap:   make(map[int][]*twitterclient.Tweet),
+		usersTweetIdSet: make(map[int]map[uint64]struct{}),
 	}
-	td.data = make(map[int][]*twitterclient.Tweet)
-	td.set = make(map[int]map[uint64]struct{})
 	return &td
 }
 
-func (td *TweetDumper) Push(eid int, tweet ...*twitterclient.Tweet) int {
-	_, ok := td.data[eid]
+////////////////////////////////////////////////////////////////////////////////
+
+func (td *TweetDumper) Push(
+	userEntityId int,
+	tweets ...*twitterclient.Tweet,
+) int {
+	_, ok := td.userTweetsMap[userEntityId]
 	if !ok {
-		td.data[eid] = make([]*twitterclient.Tweet, 0, len(tweet))
-		td.set[eid] = make(map[uint64]struct{})
+		td.userTweetsMap[userEntityId] = make([]*twitterclient.Tweet, 0, len(tweets))
+		td.usersTweetIdSet[userEntityId] = make(map[uint64]struct{})
 	}
 
 	oldCount := td.count
 
-	for _, tw := range tweet {
-		_, exist := td.set[eid][tw.Id]
+	for _, tw := range tweets {
+		_, exist := td.usersTweetIdSet[userEntityId][tw.Id]
 		if exist {
 			continue
 		}
-		td.data[eid] = append(td.data[eid], tw)
-		td.set[eid][tw.Id] = struct{}{}
+		td.userTweetsMap[userEntityId] = append(td.userTweetsMap[userEntityId], tw)
+		td.usersTweetIdSet[userEntityId][tw.Id] = struct{}{}
 		td.count++
 	}
 	return td.count - oldCount
 }
+
+func (td *TweetDumper) Clear() {
+	td.userTweetsMap = make(map[int][]*twitterclient.Tweet)
+	td.usersTweetIdSet = make(map[int]map[uint64]struct{})
+	td.count = 0
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 func (td *TweetDumper) Load(path string) error {
 	file, err := os.OpenFile(path, os.O_RDONLY, 0)
@@ -66,9 +81,9 @@ func (td *TweetDumper) Load(path string) error {
 	if err != nil {
 		return err
 	}
+
 	loaded := make(map[int][]*twitterclient.Tweet)
-	err = json.Unmarshal(data, &loaded)
-	if err != nil {
+	if err := json.Unmarshal(data, &loaded); err != nil {
 		return err
 	}
 
@@ -79,62 +94,52 @@ func (td *TweetDumper) Load(path string) error {
 }
 
 func (td *TweetDumper) Dump(path string) error {
-	data, err := json.MarshalIndent(td.data, "", "    ")
+	data, err := json.MarshalIndent(td.userTweetsMap, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, data, 0666)
 }
 
-func (td *TweetDumper) Clear() {
-	td.data = make(map[int][]*twitterclient.Tweet)
-	td.set = make(map[int]map[uint64]struct{})
-	td.count = 0
-}
+////////////////////////////////////////////////////////////////////////////////
 
-func (td *TweetDumper) GetTotal(db *sqlx.DB) ([]*dldto.NewEntity, error) {
-	ctx := context.Background()
+func (td *TweetDumper) ListAll(ctx context.Context) ([]*dldto.NewEntity, error) {
+	res := make([]*dldto.NewEntity, 0, td.count)
 
-	results := make([]*dldto.NewEntity, 0, td.count)
-
-	for k, v := range td.data {
-		e, err := td.userEntityRepo.GetById(ctx, db, k)
+	for entityID, userTweets := range td.userTweetsMap {
+		userEntity, err := td.userEntityRepo.GetById(ctx, td.db, entityID)
 		if err != nil {
 			return nil, err
 		}
-		if e == nil {
-			return nil, fmt.Errorf("entity %d is not exists", k)
+		if userEntity == nil {
+			return nil, fmt.Errorf("entity %d is not exists", entityID)
 		}
-		ue, err := smartpathdto.RebuildUserSmartPath(e)
+
+		userSmartPath, err := smartpathdto.NewWithoutDepth(userEntity)
 		if err != nil {
 			return nil, err
 		}
 
-		for _, tw := range v {
-			results = append(results, &dldto.NewEntity{Tweet: tw, Entity: ue})
+		for _, tw := range userTweets {
+			res = append(
+				res,
+				&dldto.NewEntity{Tweet: tw, Entity: userSmartPath},
+			)
 		}
 	}
-	return results, nil
+
+	return res, nil
 }
 
 func (td *TweetDumper) Count() int {
 	return td.count
 }
 
-// GetTweetsByEntityId returns tweets for a specific entity ID
-func (td *TweetDumper) GetTweetsByEntityId(entityId int) []*twitterclient.Tweet {
-	tweets, exists := td.data[entityId]
+func (td *TweetDumper) GetTweetsByEntityId(userEntityId int) []*twitterclient.Tweet {
+	tweets, exists := td.userTweetsMap[userEntityId]
 	if !exists {
 		return nil
 	}
-	return tweets
-}
 
-// GetAllEntities returns all entity IDs that have tweets
-func (td *TweetDumper) GetAllEntities() []int {
-	var entities []int
-	for entityId := range td.data {
-		entities = append(entities, entityId)
-	}
-	return entities
+	return tweets
 }

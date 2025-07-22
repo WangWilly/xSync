@@ -7,7 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (c *Client) SetRateLimit() {
+func (c *Client) setRateLimit() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -17,6 +17,8 @@ func (c *Client) SetRateLimit() {
 	}
 	c.rateLimiter = newRateLimiter(true)
 
+	////////////////////////////////////////////////////////////////////////////
+
 	c.restyClient.OnBeforeRequest(func(client *resty.Client, req *resty.Request) error {
 		u, err := url.Parse(req.URL)
 		if err != nil {
@@ -24,9 +26,11 @@ func (c *Client) SetRateLimit() {
 		}
 		return c.rateLimiter.check(req.Context(), u)
 	})
+
 	c.restyClient.OnSuccess(func(client *resty.Client, resp *resty.Response) {
 		c.rateLimiter.reset(resp.Request.RawRequest.URL, resp)
 	})
+
 	c.restyClient.OnError(func(req *resty.Request, err error) {
 		if req == nil || req.RawRequest == nil {
 			return
@@ -38,6 +42,7 @@ func (c *Client) SetRateLimit() {
 		}
 		c.rateLimiter.reset(req.RawRequest.URL, resp)
 	})
+
 	c.restyClient.AddRetryHook(func(resp *resty.Response, err error) {
 		if resp == nil || resp.Request == nil || resp.Request.RawRequest == nil {
 			return

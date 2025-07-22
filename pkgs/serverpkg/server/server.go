@@ -36,7 +36,7 @@ func NewServer(dbPath, port string) (*Server, error) {
 	}
 
 	// Load tweet dumper
-	dumper := downloading.NewDumper()
+	dumper := downloading.NewDumper(db)
 	dumpPath := filepath.Join(filepath.Dir(dbPath), "error.json")
 	if err := dumper.Load(dumpPath); err != nil {
 		// Log warning but continue - this is not a fatal error

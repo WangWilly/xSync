@@ -37,15 +37,19 @@ const (
 type Client struct {
 	restyClient *resty.Client
 	screenName  string
-	rateLimiter *rateLimiter
+	rateLimiter *rateLimitManager
 	error       error
 	mutex       sync.RWMutex
 }
 
-func New() *Client {
-	return &Client{
+func New(authToken, ct0 string) *Client {
+	res := &Client{
 		restyClient: resty.New(),
 	}
+
+	res.setTwitterIdenty(authToken, ct0)
+	res.setRateLimit()
+	return res
 }
 
 ////////////////////////////////////////////////////////////////////////////////

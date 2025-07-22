@@ -1,7 +1,6 @@
 package twitterclient
 
 import (
-	"context"
 	"net/http"
 	"time"
 
@@ -11,12 +10,13 @@ import (
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Twitter API Bearer Token
-const bearer = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA"
+const (
+	TWITTER_API_BEARER_TOKEN = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA"
+)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (c *Client) SetTwitterIdenty(ctx context.Context, authToken string, ct0 string) {
+func (c *Client) setTwitterIdenty(authToken string, ct0 string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -26,11 +26,9 @@ func (c *Client) SetTwitterIdenty(ctx context.Context, authToken string, ct0 str
 	c.configureTransport()
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
 // setClientAuth configures authentication for the Twitter API client
 func (c *Client) setClientAuth(authToken string, ct0 string) {
-	c.restyClient.SetAuthToken(bearer)
+	c.restyClient.SetAuthToken(TWITTER_API_BEARER_TOKEN)
 	c.restyClient.SetCookie(&http.Cookie{
 		Name:  COOKIE_AUTH_TOKEN,
 		Value: authToken,

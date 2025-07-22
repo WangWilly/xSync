@@ -9,7 +9,7 @@ import (
 
 ////////////////////////////////////////////////////////////////////////////////
 
-var screenNamePattern = regexp.MustCompile(`"screen_name":"(\S+?)"`)
+var SCREEN_NAME_PATTERN = regexp.MustCompile(`"screen_name":"(\S+?)"`)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -18,24 +18,28 @@ func (c *Client) GetScreenName(ctx context.Context) (string, error) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	if c.screenName == "" {
-		name, err := c.GetScreenNameFromTwitter(ctx)
-		if err != nil {
-			return "", err
-		}
-		c.screenName = name
+	if c.screenName != "" {
+		return c.screenName, nil
 	}
+
+	name, err := c.getScreenNameFromTwitter(ctx)
+	if err != nil {
+		return "", err
+	}
+	c.screenName = name
 	return c.screenName, nil
 }
 
-func (c *Client) GetScreenNameFromTwitter(ctx context.Context) (string, error) {
+func (c *Client) getScreenNameFromTwitter(ctx context.Context) (string, error) {
 	// Clone client and remove Authorization header
 	clonedClient := c.restyClient.Clone()
 	clonedClient.SetAuthToken("")
 
-	req := clonedClient.R().SetContext(ctx).SetHeaders(map[string]string{
-		HEADER_USER_AGENT: USER_AGENT_1,
-	})
+	req := clonedClient.R().
+		SetContext(ctx).
+		SetHeaders(map[string]string{
+			HEADER_USER_AGENT: USER_AGENT_1,
+		})
 	resp, err := req.Get(X_HOME)
 	if err != nil {
 		return "", err
@@ -48,8 +52,7 @@ func (c *Client) GetScreenNameFromTwitter(ctx context.Context) (string, error) {
 }
 
 func extractScreenNameFromHome(home []byte) string {
-	// extracts screen name from home page HTML
-	subs := screenNamePattern.FindStringSubmatch(string(home))
+	subs := SCREEN_NAME_PATTERN.FindStringSubmatch(string(home))
 	if len(subs) == 0 {
 		return ""
 	}

@@ -18,7 +18,7 @@ func (c *Client) GetUserByScreenName(ctx context.Context, screenName string) (*U
 	}
 
 	// Parse the response
-	return c.parseUserResp(resp.Body())
+	return parseUserResp(resp.Body())
 }
 
 // buildUserByScreenNameUrl constructs the URL for fetching user by screen name

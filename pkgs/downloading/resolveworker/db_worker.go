@@ -140,7 +140,12 @@ func (w *dbWorker) fetchTweetOrFallbackToHeapWithDB(
 		cancel(fmt.Errorf("no client available"))
 		return nil
 	}
-	tweets, err := client.GetMedias(ctx, user, utils.TimeRange{Begin: entity.LatestReleaseTime()})
+
+	tweets, err := client.ListTweetsByUserAndTimeRange(
+		ctx,
+		user,
+		utils.TimeRange{Begin: entity.LatestReleaseTime()},
+	)
 	if err == twitterclient.ErrWouldBlock {
 		safePushToHeap("client would block")
 		return nil
@@ -158,33 +163,39 @@ func (w *dbWorker) fetchTweetOrFallbackToHeapWithDB(
 			return nil
 		}
 	}
+	if err != nil {
+		logger.
+			WithField("user", entity.Name()).
+			Errorln("failed to get user medias:", err)
+		safePushToHeap("failed to get user medias")
+		return nil
+	}
 
 	if ctx.Err() != nil {
 		safePushToHeap("context cancelled while getting user medias")
 		return nil
 	}
 
-	if err != nil {
-		logger.WithField("user", entity.Name()).Warnln("failed to get user medias:", err)
-		return nil
-	}
-
 	if len(tweets) == 0 {
-		logger.WithField("user", entity.Name()).Infoln("no tweets found, updating user medias count")
 		if err := w.userEntityRepo.UpdateMediaCount(
 			ctx,
 			w.db,
 			entity.Id(),
 			user.MediaCount,
 		); err != nil {
-			logger.WithField("user", entity.Name()).Panicln("failed to update user medias count:", err)
+			logger.
+				WithField("user", entity.Name()).
+				Errorln("failed to update user medias count:", err)
 		}
 		return nil
 	}
-	logger.WithFields(log.Fields{
-		"user":     entity.Name(),
-		"tweetNum": len(tweets),
-	}).Infoln("found tweets, saving to database and preparing to push to tweet channel")
+
+	logger.
+		WithFields(log.Fields{
+			"user":     entity.Name(),
+			"tweetNum": len(tweets),
+		}).
+		Infoln("found tweets, saving to database and preparing to push to tweet channel")
 
 	// Save tweets to database before processing
 	w.saveTweetsToDatabase(ctx, tweets, entity.TwitterId(), logger)
@@ -210,12 +221,14 @@ tweetLoop:
 		}
 	}
 
-	var tweetsToUpdate []*dldto.NewEntity
+	var tweetsNotSent []*dldto.NewEntity
 	for i := currIdx; i < len(tweets); i++ {
-		tweetsToUpdate = append(tweetsToUpdate, &dldto.NewEntity{Tweet: tweets[i], Entity: entity})
+		tweetsNotSent = append(tweetsNotSent, &dldto.NewEntity{Tweet: tweets[i], Entity: entity})
 	}
+	logger.
+		WithField("user", entity.Name()).
+		Infoln("updating user medias count in database")
 
-	logger.WithField("user", entity.Name()).Infoln("updating user medias count in database")
 	if err := w.userEntityRepo.UpdateTweetStat(
 		ctx,
 		w.db,
@@ -226,7 +239,7 @@ tweetLoop:
 		logger.WithField("user", entity.Name()).Panicln("failed to update user tweets stat:", err)
 	}
 
-	return tweetsToUpdate
+	return tweetsNotSent
 }
 
 // saveTweetsToDatabase saves tweets to the database
@@ -288,9 +301,13 @@ func (w *dbWorker) DownloadTweetMediaFromTweetChanWithDB(
 				incrementConsumed()
 				drainedCount++
 				failedTweets = append(failedTweets, pt)
-				logger.WithField("tweet", pt.GetTweet().Id).Debug("added panic-drained tweet to failed list")
+				logger.
+					WithField("tweet", pt.GetTweet().Id).
+					Debug("added panic-drained tweet to failed list")
 			}
-			logger.WithField("drainedCount", drainedCount).Debug("finished draining tweets due to panic")
+			logger.
+				WithField("drainedCount", drainedCount).
+				Debug("finished draining tweets due to panic")
 		}
 	}()
 

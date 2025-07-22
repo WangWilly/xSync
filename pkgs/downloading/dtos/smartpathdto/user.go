@@ -25,7 +25,7 @@ func New(record *model.UserEntity, depth int) *UserSmartPath {
 	}
 }
 
-func RebuildUserSmartPath(record *model.UserEntity) (*UserSmartPath, error) {
+func NewWithoutDepth(record *model.UserEntity) (*UserSmartPath, error) {
 	if record == nil {
 		return nil, fmt.Errorf("record is nil")
 	}

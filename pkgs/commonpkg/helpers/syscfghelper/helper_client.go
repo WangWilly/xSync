@@ -14,10 +14,10 @@ import (
 func (h *helper) GetMainClient(ctx context.Context) (*twitterclient.Client, error) {
 	logger := log.WithField("caller", "syscfghelper.GetMainClient")
 
-	client := twitterclient.New()
-	client.SetTwitterIdenty(ctx, h.sysConfig.Cookie.AuthToken, h.sysConfig.Cookie.Ct0)
-	client.SetRateLimit()
-
+	client := twitterclient.New(
+		h.sysConfig.Cookie.AuthToken,
+		h.sysConfig.Cookie.Ct0,
+	)
 	screenName, err := client.GetScreenName(ctx)
 	if err != nil {
 		logger.Errorln("failed to get screen name:", err)
@@ -82,10 +82,7 @@ func batchLogin(ctx context.Context, cookies []*config.Cookie) []*twitterclient.
 			continue
 		}
 
-		client := twitterclient.New()
-		client.SetTwitterIdenty(ctx, cookie.AuthToken, cookie.Ct0)
-		client.SetRateLimit()
-
+		client := twitterclient.New(cookie.AuthToken, cookie.Ct0)
 		screenName, err := client.GetScreenName(ctx)
 		if err != nil {
 			log.Warnf("failed to get screen name for client %d: %v", i, err)

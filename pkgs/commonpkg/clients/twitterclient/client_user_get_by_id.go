@@ -18,7 +18,7 @@ func (c *Client) GetUserById(ctx context.Context, id uint64) (*User, error) {
 	}
 
 	// Parse the response
-	return c.parseUserResp(resp.Body())
+	return parseUserResp(resp.Body())
 }
 
 // buildUserByIdUrl constructs the URL for fetching user by ID

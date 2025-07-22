@@ -25,7 +25,7 @@ func (h *helper) DoFollow(ctx context.Context, metas []twitterclient.TitledUserL
 				continue
 			}
 
-			if err := client.FollowUser(ctx, user.TwitterId); err != nil {
+			if err := client.DoFollowByUserId(ctx, user.TwitterId); err != nil {
 				logger.Warnln("failed to follow user:", err)
 				continue
 			}

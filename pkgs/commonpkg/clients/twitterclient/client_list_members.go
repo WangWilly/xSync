@@ -16,23 +16,25 @@ const (
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (c *Client) GetAllListMembers(ctx context.Context, listId uint64) ([]*User, error) {
+func (c *Client) ListAllMembersByListId(ctx context.Context, listId uint64) ([]*User, error) {
 	logger := log.WithField("caller", "Client.GetAllListMembers")
 
-	res, err := c.MustGetAllListMembers(ctx, listId)
+	res, err := c.MustListAllMembersByListId(ctx, listId)
 	if err != nil {
+		logger.
+			WithError(err).
+			Errorf("failed to get members for list %d", listId)
+
 		// 403: Dmcaed
 		if utils.IsStatusCode(err, 404) || utils.IsStatusCode(err, 403) {
-			logger.WithError(err).Errorf("failed to get members for list %d", listId)
 			return nil, nil
 		}
-		logger.WithError(err).Errorf("failed to get members for list %d", listId)
 		return nil, err
 	}
 	return res, nil
 }
 
-func (c *Client) MustGetAllListMembers(ctx context.Context, listId uint64) ([]*User, error) {
+func (c *Client) MustListAllMembersByListId(ctx context.Context, listId uint64) ([]*User, error) {
 	api := ListParams{
 		VariablesForm: LIST_MEMBERS_VARIABLES_FORM,
 		Features:      LIST_FEATURES,
@@ -47,10 +49,15 @@ func (c *Client) MustGetAllListMembers(ctx context.Context, listId uint64) ([]*U
 		return nil, err
 	}
 
-	return c.itemContentsToUsers(itemContents), nil
+	return itemContentsToUsers(itemContents), nil
 }
 
-func (c *Client) GetListMembers(ctx context.Context, listId uint64, pageSize int, cursor string) ([]*User, string, error) {
+func (c *Client) ListMembersByListId(
+	ctx context.Context,
+	listId uint64,
+	pageSize int,
+	cursor string,
+) ([]*User, string, error) {
 	listParams := ListParams{
 		VariablesForm: LIST_MEMBERS_VARIABLES_FORM,
 		Features:      LIST_FEATURES,
@@ -65,6 +72,6 @@ func (c *Client) GetListMembers(ctx context.Context, listId uint64, pageSize int
 		return nil, "", err
 	}
 
-	users := c.itemContentsToUsers(itemContents)
+	users := itemContentsToUsers(itemContents)
 	return users, nextCursor, nil
 }

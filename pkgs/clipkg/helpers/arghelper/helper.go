@@ -77,7 +77,7 @@ func (h *helper) GetTitledUserLists(
 				logger.Errorln("failed to get raw list byte by id:", err)
 				continue
 			}
-			members, err := h.client.GetAllListMembers(ctx, listId)
+			members, err := h.client.ListAllMembersByListId(ctx, listId)
 			if err != nil {
 				logger.Errorln("failed to get all list members:", err)
 				continue
@@ -98,7 +98,7 @@ func (h *helper) GetTitledUserLists(
 				logger.Errorln("failed to get user by id for followers:", err)
 				continue
 			}
-			followers, err := h.client.GetAllFollowingMembers(ctx, userId)
+			followers, err := h.client.ListAllFollowingMembersByUserId(ctx, userId)
 			if err != nil {
 				logger.Errorln("failed to get all following members:", err)
 				continue

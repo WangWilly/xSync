@@ -16,22 +16,23 @@ const (
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (c *Client) GetAllFollowingMembers(ctx context.Context, userId uint64) ([]*User, error) {
+func (c *Client) ListAllFollowingMembersByUserId(ctx context.Context, userId uint64) ([]*User, error) {
 	logger := log.WithField("caller", "Client.GetAllFollowingMembers")
-	res, err := c.MustGetAllFollowingMembers(ctx, userId)
+
+	res, err := c.MustListAllFollowingMembersByUserId(ctx, userId)
 	if err != nil {
 		// 403: Dmcaed
+		logger.WithError(err).Errorf("failed to get following members for user %d", userId)
 		if utils.IsStatusCode(err, 404) || utils.IsStatusCode(err, 403) {
-			logger.WithError(err).Errorf("failed to get following members for user %d", userId)
 			return nil, nil
 		}
-		logger.WithError(err).Errorf("failed to get following members for user %d", userId)
 		return nil, err
 	}
+
 	return res, nil
 }
 
-func (c *Client) MustGetAllFollowingMembers(ctx context.Context, userId uint64) ([]*User, error) {
+func (c *Client) MustListAllFollowingMembersByUserId(ctx context.Context, userId uint64) ([]*User, error) {
 	listParams := ListParams{
 		VariablesForm: USER_VARIABLES_FORM,
 		Features:      USER_FEATURES,
@@ -41,15 +42,25 @@ func (c *Client) MustGetAllFollowingMembers(ctx context.Context, userId uint64) 
 		Cursor: "",
 	}
 
-	itemContents, err := c.getTimelineItemContentsTillEnd(ctx, GRAPHQL_FOLLOWING, listParams, INST_PATH_USER_TIMELINE)
+	itemContents, err := c.getTimelineItemContentsTillEnd(
+		ctx,
+		GRAPHQL_FOLLOWING,
+		listParams,
+		INST_PATH_USER_TIMELINE,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return c.itemContentsToUsers(itemContents), nil
+	return itemContentsToUsers(itemContents), nil
 }
 
-func (c *Client) GetFollowing(ctx context.Context, userId uint64, pageSize int, cursor string) ([]*User, string, error) {
+func (c *Client) ListFollowingMembers(
+	ctx context.Context,
+	userId uint64,
+	pageSize int,
+	cursor string,
+) ([]*User, string, error) {
 	listParams := ListParams{
 		VariablesForm: USER_VARIABLES_FORM,
 		Features:      USER_FEATURES,
@@ -64,6 +75,6 @@ func (c *Client) GetFollowing(ctx context.Context, userId uint64, pageSize int, 
 		return nil, "", err
 	}
 
-	users := c.itemContentsToUsers(itemContents)
+	users := itemContentsToUsers(itemContents)
 	return users, nextCursor, nil
 }

@@ -21,8 +21,8 @@ type Manager struct {
 	clientScreenNames *utils.SyncMap[*Client, string] // tracks client screen names
 	clientErrors      *utils.SyncMap[*Client, error]  // tracks client errors
 
-	clientRateLimiters *utils.SyncMap[*Client, *rateLimiter] // tracks client rate limit
-	apiCounts          *utils.SyncMap[string, *atomic.Int32] // tracks API call counts
+	clientRateLimiters *utils.SyncMap[*Client, *rateLimitManager] // tracks client rate limit
+	apiCounts          *utils.SyncMap[string, *atomic.Int32]      // tracks API call counts
 }
 
 func NewManager() *Manager {
@@ -33,7 +33,7 @@ func NewManager() *Manager {
 		clientScreenNames: utils.NewSyncMap[*Client, string](),
 		clientErrors:      utils.NewSyncMap[*Client, error](),
 
-		clientRateLimiters: utils.NewSyncMap[*Client, *rateLimiter](),
+		clientRateLimiters: utils.NewSyncMap[*Client, *rateLimitManager](),
 		apiCounts:          utils.NewSyncMap[string, *atomic.Int32](),
 	}
 }

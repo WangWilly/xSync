@@ -13,10 +13,8 @@ import (
 	"github.com/WangWilly/xSync/pkgs/commonpkg/database"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/helpers/syscfghelper"
 	"github.com/WangWilly/xSync/pkgs/downloading"
-	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
 	"github.com/WangWilly/xSync/pkgs/downloading/resolveworker"
-	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -77,25 +75,6 @@ func main() {
 			logger.Warnln("[listener] caught signal:", sig)
 		}
 		cancel()
-	}()
-
-	////////////////////////////////////////////////////////////////////////////
-	// Failed Tweets Dumping and Retry (Deferred)
-	////////////////////////////////////////////////////////////////////////////
-
-	dumper := downloading.NewDumper()
-	dumpPath, err := sysCfgHelper.GetErrorBkJsonPath()
-	if err != nil {
-		logger.Fatalln("failed to get error backup path:", err)
-	}
-	if err := dumper.Load(dumpPath); err != nil {
-		logger.Fatalln("failed to load previous tweets", err)
-	}
-	logger.Infoln("loaded previous failed tweets:", dumper.Count())
-	var toDump = make([]*dldto.NewEntity, 0)
-	defer func() {
-		dumper.Dump(dumpPath)
-		logger.Infof("%d tweets have been dumped and will be downloaded the next time the program runs", dumper.Count())
 	}()
 
 	////////////////////////////////////////////////////////////////////////////
@@ -169,61 +148,54 @@ func main() {
 	if err != nil {
 		logger.Fatalln(err)
 	}
-	dbWorker := resolveworker.NewDBWorker(
-		db,
-		manager,
-		heapHelper,
-	)
+	dbWorker := resolveworker.NewDBWorker(db, manager, heapHelper)
 	downloadHelper := downloading.NewDownloadHelperWithConfig(
 		sysCfgHelper.GetDownloadingCfg(),
 		dbWorker,
 	)
 
-	// retry failed tweets at exit
-	defer func() {
-		for _, te := range toDump {
-			dumper.Push(te.GetUserSmartPath().Id(), te.GetTweet())
-		}
-		// 如果手动取消，不尝试重试，快速终止进程
-		if ctx.Err() != context.Canceled && !noRetry {
-			retryFailedTweets(ctx, dumper, db, downloadHelper)
-		}
-	}()
+	dumper := downloading.NewDumper(db)
+	dumpPath, err := sysCfgHelper.GetErrorBkJsonPath()
+	if err != nil {
+		logger.Fatalln("failed to get error backup path:", err)
+	}
+	if err := dumper.Load(dumpPath); err != nil {
+		logger.Fatalln("failed to load previous tweets", err)
+	}
 
-	toDump, err = downloadHelper.BatchUserDownloadWithDB(ctx)
+	////////////////////////////////////////////////////////////////////////////
+
+	toDump, err := downloadHelper.BatchUserDownloadWithDB(ctx)
 	if err != nil {
 		logger.Errorln("failed to download:", err)
 	}
-}
+	for _, te := range toDump {
+		dumper.Push(te.GetUserSmartPath().Id(), te.GetTweet())
+	}
 
-////////////////////////////////////////////////////////////////////////////////
-// Retry Failed Tweets Function
-////////////////////////////////////////////////////////////////////////////////
+	if ctx.Err() == context.Canceled && noRetry {
+		dumper.Dump(dumpPath)
+		logger.Infof("%d tweets have been dumped and will be downloaded the next time the program runs", dumper.Count())
+		return
+	}
 
-type DownloadHelper interface {
-	BatchDownloadTweetWithDB(ctx context.Context, tweetDlMetas ...*dldto.NewEntity) []*dldto.NewEntity
-}
-
-func retryFailedTweets(ctx context.Context, dumper *downloading.TweetDumper, db *sqlx.DB, downloadHelper DownloadHelper) error {
+	logger.Infoln("starting to retry failed tweets")
 	if dumper.Count() == 0 {
-		return nil
+		return
 	}
-
-	log.Infoln("starting to retry failed tweets")
-	legacy, err := dumper.GetTotal(db)
+	retrible, err := dumper.ListAll(ctx)
 	if err != nil {
-		return err
+		logger.Fatalln("failed to list all failed tweets:", err)
 	}
 
-	toretry := make([]*dldto.NewEntity, 0, len(legacy))
-	toretry = append(toretry, legacy...)
-
-	newFails := downloadHelper.BatchDownloadTweetWithDB(ctx, toretry...)
+	newFails := downloadHelper.BatchDownloadTweetWithDB(ctx, retrible...)
 	dumper.Clear()
+
 	for _, pt := range newFails {
 		te := pt
 		dumper.Push(te.Entity.Id(), te.Tweet)
 	}
 
-	return nil
+	dumper.Dump(dumpPath)
+	logger.Infof("%d tweets have been dumped and will be downloaded the next time the program runs", dumper.Count())
 }
