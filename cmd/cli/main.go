@@ -52,11 +52,8 @@ func main() {
 
 	////////////////////////////////////////////////////////////////////////////
 
-	dbPath, err := sysCfgHelper.GetSqliteDBPath()
-	if err != nil {
-		logger.Fatalln("failed to get database path:", err)
-	}
-	db, err := database.ConnectDatabase(dbPath)
+	dbConfig := sysCfgHelper.GetDatabaseConfig()
+	db, err := database.ConnectWithConfig(dbConfig)
 	if err != nil {
 		logger.Fatalln("failed to connect to database:", err)
 	}

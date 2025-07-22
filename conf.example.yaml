@@ -1,0 +1,29 @@
+# xSync Configuration File
+# Copy this file to ~/.x_sync/conf.yaml and modify as needed
+
+# Storage directory for downloaded media
+root_path: "/path/to/storage"
+
+# Twitter authentication
+cookie:
+  auth_token: "your_auth_token_here"
+  ct0: "your_ct0_token_here"
+
+# Download settings
+max_download_routine: 5
+
+# Database configuration
+database:
+  # Options: "sqlite" or "postgres"
+  type: "sqlite"
+  
+  # For SQLite (default)
+  path: "/path/to/storage/data/xSync.db"
+  
+  # For PostgreSQL (uncomment and modify as needed)
+  # type: "postgres"
+  # host: "localhost"
+  # port: "5432"
+  # user: "xsync"
+  # password: "your_password"
+  # dbname: "xsync"

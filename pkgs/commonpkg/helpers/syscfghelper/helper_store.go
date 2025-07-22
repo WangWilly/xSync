@@ -3,6 +3,8 @@ package syscfghelper
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/WangWilly/xSync/pkgs/clipkg/config"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -15,6 +17,7 @@ const (
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Deprecated: Use GetDatabaseConfig() instead
 func (h *helper) GetSqliteDBPath() (string, error) {
 	p := filepath.Join(h.sysConfig.RootPath, SQLITE_DB_FILE)
 	err := os.MkdirAll(filepath.Dir(p), 0755)
@@ -43,4 +46,18 @@ func (h *helper) GetUsersAssetsPath() (string, error) {
 	}
 
 	return p, nil
+}
+
+func (h *helper) GetDatabaseConfig() config.DatabaseConfig {
+	dbConfig := h.sysConfig.Database
+
+	// If database configuration is not specified, default to SQLite
+	if dbConfig.Type == "" {
+		dbConfig.Type = "sqlite"
+		if dbConfig.Path == "" {
+			dbConfig.Path = filepath.Join(h.sysConfig.RootPath, SQLITE_DB_FILE)
+		}
+	}
+
+	return dbConfig
 }

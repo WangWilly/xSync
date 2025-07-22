@@ -5,8 +5,10 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
+	"github.com/WangWilly/xSync/pkgs/clipkg/config"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/chromatokenclient"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/database"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/tokenrepo"
@@ -17,30 +19,55 @@ import (
 func main() {
 	ctx := context.Background()
 
-	// Database configuration - you may want to move this to config file
-	dbConfig := struct {
-		Host     string
-		Port     string
-		User     string
-		Password string
-		DBName   string
-	}{
-		Host:     "localhost",
-		Port:     "5432",
-		User:     "xsync-2025",
-		Password: "xsync-2025",
-		DBName:   "xsync-2025",
+	// Try to load configuration from file first
+	var dbConfig config.DatabaseConfig
+	configPath := os.Getenv("CONFIG_PATH")
+	if configPath == "" {
+		// Default configuration path
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			configPath = filepath.Join(homeDir, ".x_sync", "conf.yaml")
+		}
 	}
 
-	chromaURL := "http://localhost:8000"
+	if configPath != "" {
+		if conf, err := config.ParseConfigFromFile(configPath); err == nil {
+			dbConfig = conf.Database
+			log.Printf("Loaded database configuration from: %s", configPath)
+		}
+	}
+
+	// If no configuration loaded, check environment variables or use defaults
+	if dbConfig.Type == "" {
+		dbType := os.Getenv("DB_TYPE")
+		if dbType == "" {
+			dbType = "postgres" // RAG analyzer defaults to PostgreSQL
+		}
+		dbConfig.Type = dbType
+
+		switch dbType {
+		case "postgres", "postgresql":
+			dbConfig.Host = getEnvOrDefault("DB_HOST", "localhost")
+			dbConfig.Port = getEnvOrDefault("DB_PORT", "5432")
+			dbConfig.User = getEnvOrDefault("DB_USER", "xsync-2025")
+			dbConfig.Password = getEnvOrDefault("DB_PASSWORD", "xsync-2025")
+			dbConfig.DBName = getEnvOrDefault("DB_NAME", "xsync-2025")
+		default:
+			// SQLite fallback
+			dbPath := getEnvOrDefault("DB_PATH", "./conf/data/xSync.db")
+			dbConfig.Path = dbPath
+		}
+	}
+
+	chromaURL := getEnvOrDefault("CHROMA_URL", "http://localhost:8000")
 
 	log.Println("Starting xSync RAG Analyzer...")
 
-	// Initialize PostgreSQL connection
-	log.Println("Connecting to PostgreSQL...")
-	db, err := database.ConnectPostgres(dbConfig.Host, dbConfig.Port, dbConfig.User, dbConfig.Password, dbConfig.DBName)
+	// Initialize database connection
+	log.Printf("Connecting to %s database...", dbConfig.Type)
+	db, err := database.ConnectWithConfig(dbConfig)
 	if err != nil {
-		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
 
@@ -87,4 +114,11 @@ func main() {
 
 	log.Println("RAG analysis completed successfully!")
 	log.Println("Application stopped.")
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
