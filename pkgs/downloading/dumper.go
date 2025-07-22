@@ -1,26 +1,31 @@
 package downloading
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 
-	"github.com/WangWilly/xSync/pkgs/clipkg/database"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/twitterclient"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/userentityrepo"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
 	"github.com/jmoiron/sqlx"
 )
 
 type TweetDumper struct {
+	userEntityRepo UserEntityRepo
+
 	data  map[int][]*twitterclient.Tweet
 	set   map[int]map[uint64]struct{}
 	count int
 }
 
 func NewDumper() *TweetDumper {
-	td := TweetDumper{}
+	td := TweetDumper{
+		userEntityRepo: userentityrepo.New(),
+	}
 	td.data = make(map[int][]*twitterclient.Tweet)
 	td.set = make(map[int]map[uint64]struct{})
 	return &td
@@ -88,17 +93,19 @@ func (td *TweetDumper) Clear() {
 }
 
 func (td *TweetDumper) GetTotal(db *sqlx.DB) ([]*dldto.NewEntity, error) {
+	ctx := context.Background()
+
 	results := make([]*dldto.NewEntity, 0, td.count)
 
 	for k, v := range td.data {
-		e, err := database.GetUserEntityById(db, k)
+		e, err := td.userEntityRepo.GetById(ctx, db, k)
 		if err != nil {
 			return nil, err
 		}
 		if e == nil {
 			return nil, fmt.Errorf("entity %d is not exists", k)
 		}
-		ue, err := smartpathdto.RebuildUserSmartPath(db, e)
+		ue, err := smartpathdto.RebuildUserSmartPath(e)
 		if err != nil {
 			return nil, err
 		}

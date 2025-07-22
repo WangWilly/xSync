@@ -9,9 +9,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/WangWilly/xSync/pkgs/clipkg/database"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/mediarepo"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/tweetrepo"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/userentityrepo"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/utils"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/smartpathdto"
@@ -21,14 +23,31 @@ import (
 
 // dbWorker extends the regular worker with database integration for tweets and media
 type dbWorker struct {
-	pushTimeout          time.Duration
+	db *sqlx.DB
+
+	pushTimeout time.Duration
+
 	twitterClientManager *twitterclient.Manager
+	heapHelper           HeapHelper
+
+	userEntityRepo UserEntityRepo
+	tweetRepo      TweetRepo
+	mediaRepo      MediaRepo
 }
 
-func NewDBWorker(twitterClientManager *twitterclient.Manager) *dbWorker {
+func NewDBWorker(
+	db *sqlx.DB,
+	twitterClientManager *twitterclient.Manager,
+	heapHelper HeapHelper,
+) *dbWorker {
 	return &dbWorker{
+		db:                   db,
 		pushTimeout:          120 * time.Second,
 		twitterClientManager: twitterClientManager,
+		heapHelper:           heapHelper,
+		userEntityRepo:       userentityrepo.New(),
+		tweetRepo:            tweetrepo.New(),
+		mediaRepo:            mediarepo.New(),
 	}
 }
 
@@ -38,27 +57,35 @@ func NewDBWorker(twitterClientManager *twitterclient.Manager) *dbWorker {
 func (w *dbWorker) ProduceFromHeapToTweetChanWithDB(
 	ctx context.Context,
 	cancel context.CancelCauseFunc,
-	heapHelper HeapHelper,
-	db *sqlx.DB,
 	output chan<- *dldto.NewEntity,
 	incrementProduced func(),
 ) ([]*dldto.NewEntity, error) {
 	logger := log.WithField("function", "ProduceFromHeapWithDB")
 
+	heap := w.heapHelper.GetHeap()
+	logger.
+		WithField("worker", "producer").
+		Infof("initial heap size: %d", heap.Size())
+
 	var unsentTweets []*dldto.NewEntity
-
-	heap := heapHelper.GetHeap()
-	logger.WithField("worker", "producer").Infof("initial heap size: %d", heap.Size())
-
-	// Process users from heap sequentially
 	for !heap.Empty() && ctx.Err() == nil {
 		entity := heap.Peek()
 		heap.Pop()
 
-		logger.WithField("user", entity.Name()).Infoln("processing user from heap with database integration")
-		currUnsentTweets := w.fetchTweetOrFallbackToHeapWithDB(ctx, cancel, entity, heapHelper, db, output, incrementProduced)
+		logger.
+			WithField("user", entity.Name()).
+			Infoln("processing user from heap with database integration")
+		currUnsentTweets := w.fetchTweetOrFallbackToHeapWithDB(
+			ctx,
+			cancel,
+			entity,
+			output,
+			incrementProduced,
+		)
 		if len(currUnsentTweets) > 0 {
-			logger.WithField("user", entity.Name()).Warnf("found %d unsent tweets for user, adding to unsent list", len(currUnsentTweets))
+			logger.
+				WithField("user", entity.Name()).
+				Warnf("found %d unsent tweets for user, adding to unsent list", len(currUnsentTweets))
 			unsentTweets = append(unsentTweets, currUnsentTweets...)
 		}
 	}
@@ -67,7 +94,9 @@ func (w *dbWorker) ProduceFromHeapToTweetChanWithDB(
 		return unsentTweets, ctx.Err()
 	}
 
-	logger.WithField("worker", "producer").Info("all producers finished successfully for SimpleWorker with DB")
+	logger.
+		WithField("worker", "producer").
+		Info("all producers finished successfully for SimpleWorker with DB")
 	return unsentTweets, nil
 }
 
@@ -75,8 +104,6 @@ func (w *dbWorker) fetchTweetOrFallbackToHeapWithDB(
 	ctx context.Context,
 	cancel context.CancelCauseFunc,
 	entity *smartpathdto.UserSmartPath,
-	heapHelper HeapHelper,
-	db *sqlx.DB,
 	tweetDlMetaOutput chan<- *dldto.NewEntity,
 	incrementProduced func(),
 ) []*dldto.NewEntity {
@@ -85,8 +112,8 @@ func (w *dbWorker) fetchTweetOrFallbackToHeapWithDB(
 
 	defer utils.PanicHandler(cancel)
 
-	user := heapHelper.GetUserByTwitterId(entity.TwitterId())
-	heap := heapHelper.GetHeap()
+	user := w.heapHelper.GetUserByTwitterId(entity.TwitterId())
+	heap := w.heapHelper.GetHeap()
 	safePushToHeap := func(reason string) {
 		logger.WithField("user", entity.Name()).Warnf("%s, pushing back to heap", reason)
 		go func() {
@@ -104,7 +131,9 @@ func (w *dbWorker) fetchTweetOrFallbackToHeapWithDB(
 		return nil
 	}
 
-	logger.WithField("user", entity.Name()).Infof("latest release time: %s", entity.LatestReleaseTime())
+	logger.
+		WithField("user", entity.Name()).
+		Infof("latest release time: %s", entity.LatestReleaseTime())
 	client := w.twitterClientManager.GetMasterClient()
 	if client == nil {
 		safePushToHeap("no client available")
@@ -142,7 +171,12 @@ func (w *dbWorker) fetchTweetOrFallbackToHeapWithDB(
 
 	if len(tweets) == 0 {
 		logger.WithField("user", entity.Name()).Infoln("no tweets found, updating user medias count")
-		if err := database.UpdateUserEntityMediCount(db, entity.Id(), user.MediaCount); err != nil {
+		if err := w.userEntityRepo.UpdateMediaCount(
+			ctx,
+			w.db,
+			entity.Id(),
+			user.MediaCount,
+		); err != nil {
 			logger.WithField("user", entity.Name()).Panicln("failed to update user medias count:", err)
 		}
 		return nil
@@ -153,7 +187,7 @@ func (w *dbWorker) fetchTweetOrFallbackToHeapWithDB(
 	}).Infoln("found tweets, saving to database and preparing to push to tweet channel")
 
 	// Save tweets to database before processing
-	w.saveTweetsToDatabase(db, tweets, entity.TwitterId(), logger)
+	w.saveTweetsToDatabase(ctx, tweets, entity.TwitterId(), logger)
 
 	currIdx := 0
 tweetLoop:
@@ -182,7 +216,13 @@ tweetLoop:
 	}
 
 	logger.WithField("user", entity.Name()).Infoln("updating user medias count in database")
-	if err := database.UpdateUserEntityTweetStat(db, entity.Id(), tweets[0].CreatedAt, user.MediaCount); err != nil {
+	if err := w.userEntityRepo.UpdateTweetStat(
+		ctx,
+		w.db,
+		entity.Id(),
+		tweets[0].CreatedAt,
+		user.MediaCount,
+	); err != nil {
 		logger.WithField("user", entity.Name()).Panicln("failed to update user tweets stat:", err)
 	}
 
@@ -190,7 +230,12 @@ tweetLoop:
 }
 
 // saveTweetsToDatabase saves tweets to the database
-func (w *dbWorker) saveTweetsToDatabase(db *sqlx.DB, tweets []*twitterclient.Tweet, userId uint64, logger *log.Entry) {
+func (w *dbWorker) saveTweetsToDatabase(
+	ctx context.Context,
+	tweets []*twitterclient.Tweet,
+	userId uint64,
+	logger *log.Entry,
+) {
 	for _, tweet := range tweets {
 		dbTweet := &model.Tweet{
 			UserId:    userId,
@@ -199,7 +244,7 @@ func (w *dbWorker) saveTweetsToDatabase(db *sqlx.DB, tweets []*twitterclient.Twe
 			TweetTime: tweet.CreatedAt,
 		}
 
-		if err := database.CreateTweet(db, dbTweet); err != nil {
+		if err := w.tweetRepo.Create(ctx, w.db, dbTweet); err != nil {
 			logger.
 				WithFields(log.Fields{
 					"tweet_id": tweet.Id,
@@ -224,7 +269,6 @@ func (w *dbWorker) saveTweetsToDatabase(db *sqlx.DB, tweets []*twitterclient.Twe
 func (w *dbWorker) DownloadTweetMediaFromTweetChanWithDB(
 	ctx context.Context,
 	cancel context.CancelCauseFunc,
-	db *sqlx.DB,
 	tweetDlMetaIn <-chan *dldto.NewEntity,
 	incrementConsumed func(),
 ) []*dldto.NewEntity {
@@ -258,16 +302,22 @@ func (w *dbWorker) DownloadTweetMediaFromTweetChanWithDB(
 				return failedTweets
 			}
 
-			logger.WithField("tweet", tweetDlMeta.GetTweet().Id).Debug("processing tweet with DB integration")
-			err := w.downloadTweetMediaWithDB(ctx, db, tweetDlMeta, logger)
-			incrementConsumed()
+			logger.
+				WithField("tweet", tweetDlMeta.GetTweet().Id).
+				Debug("processing tweet with DB integration")
 
+			err := w.downloadTweetMediaWithDB(ctx, tweetDlMeta, logger)
+			incrementConsumed()
 			if err == nil {
-				logger.WithField("tweet", tweetDlMeta.GetTweet().Id).Debug("downloaded tweet successfully")
+				logger.
+					WithField("tweet", tweetDlMeta.GetTweet().Id).
+					Debug("downloaded tweet successfully")
 				continue
 			}
 
-			logger.WithField("tweet", tweetDlMeta.GetTweet().Id).Errorf("failed to download tweet: %v", err)
+			logger.
+				WithField("tweet", tweetDlMeta.GetTweet().Id).
+				Errorf("failed to download tweet: %v", err)
 			failedTweets = append(failedTweets, tweetDlMeta)
 
 			// Cancel context and exit if critical errors occur
@@ -283,9 +333,13 @@ func (w *dbWorker) DownloadTweetMediaFromTweetChanWithDB(
 				incrementConsumed()
 				drainedCount++
 				failedTweets = append(failedTweets, pt)
-				logger.WithField("tweet", pt.GetTweet().Id).Debug("added drained tweet to failed list")
+				logger.
+					WithField("tweet", pt.GetTweet().Id).
+					Debug("added drained tweet to failed list")
 			}
-			logger.WithField("drainedCount", drainedCount).Debug("finished draining tweets due to context cancellation")
+			logger.
+				WithField("drainedCount", drainedCount).
+				Debug("finished draining tweets due to context cancellation")
 			return failedTweets
 		}
 	}
@@ -294,13 +348,12 @@ func (w *dbWorker) DownloadTweetMediaFromTweetChanWithDB(
 // downloadTweetMediaWithDB downloads media and saves info to database
 func (w *dbWorker) downloadTweetMediaWithDB(
 	ctx context.Context,
-	db *sqlx.DB,
 	tweetDlMeta *dldto.NewEntity,
 	logger *log.Entry,
 ) error {
 	tweet := tweetDlMeta.GetTweet()
 
-	dbTweet, err := database.GetTweetByTweetId(db, tweet.Id)
+	dbTweet, err := w.tweetRepo.GetByTweetId(ctx, w.db, tweet.Id)
 	if err != nil {
 		logger.WithFields(log.Fields{
 			"tweet_id": tweet.Id,
@@ -347,7 +400,7 @@ func (w *dbWorker) downloadTweetMediaWithDB(
 			Location: mediaPath,
 		}
 
-		if err := database.CreateMedia(db, dbMedia); err != nil {
+		if err := w.mediaRepo.Create(ctx, w.db, dbMedia); err != nil {
 			logger.WithFields(log.Fields{
 				"tweet_id":    tweet.Id,
 				"twitter_id":  tweet.Id,

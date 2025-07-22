@@ -5,113 +5,68 @@ import (
 	"flag"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"runtime"
 	"syscall"
 
-	"github.com/WangWilly/xSync/pkgs/clipkg/commandline"
-	"github.com/WangWilly/xSync/pkgs/clipkg/config"
-	"github.com/WangWilly/xSync/pkgs/clipkg/tasks"
+	"github.com/WangWilly/xSync/pkgs/clipkg/helpers/arghelper"
+	"github.com/WangWilly/xSync/pkgs/clipkg/helpers/metahelper"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/database"
-	"github.com/WangWilly/xSync/pkgs/commonpkg/logging"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/helpers/syscfghelper"
 	"github.com/WangWilly/xSync/pkgs/downloading"
 	"github.com/WangWilly/xSync/pkgs/downloading/dtos/dldto"
 	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
 	"github.com/WangWilly/xSync/pkgs/downloading/resolveworker"
-	"github.com/WangWilly/xSync/pkgs/storage"
-	"github.com/gookit/color"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 )
 
 func main() {
-	println("xSync - X Post Downloader")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	////////////////////////////////////////////////////////////////////////////
-	// Command Line Arguments Setup
-	////////////////////////////////////////////////////////////////////////////
-	var usrArgs commandline.UserArgs
-	var listArgs commandline.ListArgs
-	var follArgs commandline.UserArgs
-	var confArg bool
-	var isDebug bool
+	var userTwitterIdsArg arghelper.UserTwitterIdsArg
+	var userTwitterScreenNamesArg arghelper.UserTwitterScreenNamesArg
+	var twitterListIdsArg arghelper.TwitterListIdsArg
+	var userTwitterIdsForFollowersArg arghelper.UserTwitterIdsArg
+	flag.Var(&userTwitterIdsArg, "user", "download tweets from the user specified by user_id since the last download")
+	flag.Var(&userTwitterScreenNamesArg, "user-name", "download tweets from the user specified by screen_name since the last download")
+	flag.Var(&twitterListIdsArg, "list", "batch download each member from list specified by list_id")
+	flag.Var(&userTwitterIdsForFollowersArg, "foll", "batch download each member followed by the user specified by user_id")
+
+	sysCliParams := syscfghelper.CliParams{}
+	flag.BoolVar(&sysCliParams.ConfOverWrite, "conf", false, "reconfigure")
+	flag.BoolVar(&sysCliParams.IsDebug, "debug", false, "display debug message")
+
 	var autoFollow bool
 	var noRetry bool
-
-	flag.BoolVar(&confArg, "conf", false, "reconfigure")
-	flag.Var(&usrArgs, "user", "download tweets from the user specified by user_id/screen_name since the last download")
-	flag.Var(&listArgs, "list", "batch download each member from list specified by list_id")
-	flag.Var(&follArgs, "foll", "batch download each member followed by the user specified by user_id/screen_name")
-	flag.BoolVar(&isDebug, "debug", false, "display debug message")
 	flag.BoolVar(&autoFollow, "auto-follow", false, "send follow request automatically to protected users")
 	flag.BoolVar(&noRetry, "no-retry", false, "quickly exit without retrying failed tweets")
+
 	flag.Parse()
 
-	// context
-	ctx, cancel := context.WithCancel(context.Background())
-
-	var homepath string
-	if runtime.GOOS == "windows" {
-		homepath = os.Getenv("appdata")
-	} else {
-		homepath = os.Getenv("HOME")
-	}
-	if homepath == "" {
-		panic("failed to get home path from env")
-	}
-
-	appRootPath := filepath.Join(homepath, ".x_sync")
-	confPath := filepath.Join(appRootPath, "conf.yaml")
-	cliLogPath := filepath.Join(appRootPath, "client.log")
-	logPath := filepath.Join(appRootPath, "x_sync.log")
-	additionalCookiesPath := filepath.Join(appRootPath, "additional_cookies.yaml")
-	if err := os.MkdirAll(appRootPath, 0755); err != nil {
-		log.Fatalln("failed to make app dir", err)
-	}
+	sysCfgHelper := syscfghelper.New(sysCliParams)
+	defer sysCfgHelper.Close()
 
 	////////////////////////////////////////////////////////////////////////////
-	// Logger Initialization
+
+	logger := log.WithField("function", "main")
+	logger.Infoln("xSync started")
+
 	////////////////////////////////////////////////////////////////////////////
-	logFile, err := os.OpenFile(logPath, os.O_TRUNC|os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		log.Fatalln("failed to create log file:", err)
-	}
-	defer logFile.Close()
-	logging.InitLogger(isDebug, logFile)
 
-	// Configuration Loading
-	conf, err := config.ReadConfig(confPath)
-	if os.IsNotExist(err) || confArg {
-		conf, err = config.PromptConfig(confPath)
-		if err != nil {
-			log.Fatalln("config failure with", err)
-		}
-	}
+	dbPath, err := sysCfgHelper.GetSqliteDBPath()
 	if err != nil {
-		log.Fatalln("failed to load config:", err)
+		logger.Fatalln("failed to get database path:", err)
 	}
-	if confArg {
-		log.Println("config done")
-		return
-	}
-	log.Infoln("config is loaded")
-
-	// Storage Path Setup
-	pathHelper, err := storage.NewStorePath(conf.RootPath)
+	db, err := database.ConnectDatabase(dbPath)
 	if err != nil {
-		log.Fatalln("failed to make store dir:", err)
-	}
-
-	// Database Connection
-	db, err := database.ConnectDatabase(pathHelper.DB)
-	if err != nil {
-		log.Fatalln("failed to connect to database:", err)
+		logger.Fatalln("failed to connect to database:", err)
 	}
 	defer db.Close()
-	log.Infoln("database is connected")
+	logger.Infoln("database is connected")
 
-	// listen signal
+	////////////////////////////////////////////////////////////////////////////
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer close(sigChan)
@@ -119,99 +74,108 @@ func main() {
 	go func() {
 		sig, ok := <-sigChan
 		if ok {
-			log.Warnln("[listener] caught signal:", sig)
-			cancel()
+			logger.Warnln("[listener] caught signal:", sig)
 		}
+		cancel()
 	}()
 
 	////////////////////////////////////////////////////////////////////////////
 	// Failed Tweets Dumping and Retry (Deferred)
 	////////////////////////////////////////////////////////////////////////////
+
 	dumper := downloading.NewDumper()
-	if err := dumper.Load(pathHelper.ErrorJ); err != nil {
-		log.Fatalln("failed to load previous tweets", err)
+	dumpPath, err := sysCfgHelper.GetErrorBkJsonPath()
+	if err != nil {
+		logger.Fatalln("failed to get error backup path:", err)
 	}
-	log.Infoln("loaded previous failed tweets:", dumper.Count())
+	if err := dumper.Load(dumpPath); err != nil {
+		logger.Fatalln("failed to load previous tweets", err)
+	}
+	logger.Infoln("loaded previous failed tweets:", dumper.Count())
 	var toDump = make([]*dldto.NewEntity, 0)
 	defer func() {
-		dumper.Dump(pathHelper.ErrorJ)
-		log.Infof("%d tweets have been dumped and will be downloaded the next time the program runs", dumper.Count())
+		dumper.Dump(dumpPath)
+		logger.Infof("%d tweets have been dumped and will be downloaded the next time the program runs", dumper.Count())
 	}()
 
 	////////////////////////////////////////////////////////////////////////////
 	// Main Job Execution
 	////////////////////////////////////////////////////////////////////////////
 
-	// Twitter Authentication
-	client := twitterclient.New()
-	client.SetTwitterIdenty(ctx, conf.Cookie.AuthToken, conf.Cookie.Ct0)
-	client.SetRateLimit()
-	screenName, err := client.GetScreenName(ctx)
-	if err != nil {
-		log.Fatalln("failed to login:", err)
-	}
-	log.Infoln("signed in as:", color.FgLightBlue.Render(screenName))
-
-	cookies, err := config.ReadAdditionalCookies(additionalCookiesPath)
-	if err != nil {
-		log.Warnln("failed to load additional cookies:", err)
-	}
-	log.Debugln("loaded additional cookies:", len(cookies))
-	addtionalClients := commandline.BatchLogin(ctx, cookies)
-
-	// set logger to clients
-	clientLogFile, err := os.OpenFile(cliLogPath, os.O_TRUNC|os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		log.Fatalln("failed to create log file:", err)
-	}
-	defer clientLogFile.Close()
-
-	twitterclient.SetTwitterClientLogger(client, clientLogFile)
-	for _, client := range addtionalClients {
-		twitterclient.SetTwitterClientLogger(client, clientLogFile)
-	}
-
-	// Twitter Client Manager Setup
 	manager := twitterclient.NewManager()
-	manager.SetMasterClient(client)
-	if err := manager.AddClient(client); err != nil {
-		log.Warnln("failed to add master client to manager:", err)
-	}
-	for _, additionalClient := range addtionalClients {
-		if err := manager.AddClient(additionalClient); err != nil {
-			log.Warnln("failed to add additional client to manager:", err)
-		}
-	}
-	// report at exit
-	defer func() {
+	defer func() { // report at exit
 		for path, count := range manager.GetApiCounts() {
-			log.Infof("API %s called %d times", path, count)
+			logger.Infof("API %s called %d times", path, count)
 		}
 	}()
 
-	task, err := tasks.MakeTask(ctx, client, usrArgs, listArgs, follArgs)
+	mainClient, err := sysCfgHelper.GetMainClient(ctx)
 	if err != nil {
-		log.Fatalln("failed to parse cmd args:", err)
+		logger.Fatalln("failed to get main client:", err)
+	}
+	manager.SetMasterClient(mainClient)
+	if err := manager.AddClient(mainClient); err != nil {
+		logger.Warnln("failed to add master client to manager:", err)
 	}
 
-	if len(task.Users) == 0 && len(task.Lists) == 0 {
+	additionalClients, err := sysCfgHelper.GetOtherClients(ctx)
+	if err != nil {
+		logger.Fatalln("failed to get additional clients:", err)
+	}
+	for _, additionalClient := range additionalClients {
+		if err := manager.AddClient(additionalClient); err != nil {
+			logger.Warnln("failed to add additional client to manager:", err)
+		}
+	}
+
+	////////////////////////////////////////////////////////////////////////////
+
+	argHelper := arghelper.New(
+		mainClient,
+		userTwitterIdsArg,
+		userTwitterScreenNamesArg,
+		twitterListIdsArg,
+		userTwitterIdsForFollowersArg,
+	)
+	titledUserList := argHelper.GetTitledUserLists(ctx)
+	if err != nil {
+		logger.Fatalln("failed to get titled user lists:", err)
+	}
+	if len(titledUserList) == 0 {
+		logger.Warnln("no user or list specified, exiting")
 		return
 	}
-	log.Infoln("start working for...")
-	tasks.PrintTask(task)
 
-	heapHelperInstance, err := heaphelper.NewHelperFromTasks(ctx, client, db, task, pathHelper.Root, manager)
-	if err != nil {
-		log.Fatalln(err)
+	metahelper := metahelper.New(db, manager)
+	if err := metahelper.SaveToDb(ctx, titledUserList); err != nil {
+		logger.Fatalln("failed to save meta data to database:", err)
 	}
-	dbWorker := resolveworker.NewDBWorker(manager)
+	usersAssetsPath, err := sysCfgHelper.GetUsersAssetsPath()
+	if err != nil {
+		logger.Fatalln("failed to get users assets path:", err)
+	}
+	if err := metahelper.SaveToStorage(ctx, usersAssetsPath, titledUserList); err != nil {
+		logger.Fatalln("failed to save meta data to storage:", err)
+	}
+
+	if autoFollow {
+		metahelper.DoFollow(ctx, titledUserList)
+	}
+
+	////////////////////////////////////////////////////////////////////////////
+
+	smartPaths := metahelper.ToUserSmartPaths(ctx, titledUserList)
+	heapHelper, err := heaphelper.New(titledUserList, smartPaths)
+	if err != nil {
+		logger.Fatalln(err)
+	}
+	dbWorker := resolveworker.NewDBWorker(
+		db,
+		manager,
+		heapHelper,
+	)
 	downloadHelper := downloading.NewDownloadHelperWithConfig(
-		downloading.Config{
-			MaxDownloadRoutine: conf.MaxDownloadRoutine,
-			DownloadDir:        pathHelper.Users,
-			AutoFollow:         autoFollow,
-		},
-		heapHelperInstance,
+		sysCfgHelper.GetDownloadingCfg(),
 		dbWorker,
 	)
 
@@ -226,9 +190,9 @@ func main() {
 		}
 	}()
 
-	toDump, err = downloadHelper.BatchUserDownloadWithDB(ctx, db)
+	toDump, err = downloadHelper.BatchUserDownloadWithDB(ctx)
 	if err != nil {
-		log.Errorln("failed to download:", err)
+		logger.Errorln("failed to download:", err)
 	}
 }
 
@@ -237,7 +201,7 @@ func main() {
 ////////////////////////////////////////////////////////////////////////////////
 
 type DownloadHelper interface {
-	BatchDownloadTweetWithDB(ctx context.Context, db *sqlx.DB, tweetDlMetas ...*dldto.NewEntity) []*dldto.NewEntity
+	BatchDownloadTweetWithDB(ctx context.Context, tweetDlMetas ...*dldto.NewEntity) []*dldto.NewEntity
 }
 
 func retryFailedTweets(ctx context.Context, dumper *downloading.TweetDumper, db *sqlx.DB, downloadHelper DownloadHelper) error {
@@ -254,7 +218,7 @@ func retryFailedTweets(ctx context.Context, dumper *downloading.TweetDumper, db 
 	toretry := make([]*dldto.NewEntity, 0, len(legacy))
 	toretry = append(toretry, legacy...)
 
-	newFails := downloadHelper.BatchDownloadTweetWithDB(ctx, db, toretry...)
+	newFails := downloadHelper.BatchDownloadTweetWithDB(ctx, toretry...)
 	dumper.Clear()
 	for _, pt := range newFails {
 		te := pt

@@ -3,7 +3,6 @@ package tokenembedding
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/jmoiron/sqlx"
@@ -11,18 +10,23 @@ import (
 
 func (r *repo) Upsert(ctx context.Context, db *sqlx.DB, tokenAddress, chromaDocumentID, embeddingContent string) error {
 	query := `
-		INSERT INTO token_embeddings (token_address, chroma_document_id, embedding_content, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (chroma_document_id) DO UPDATE SET
-			embedding_content = EXCLUDED.embedding_content,
-			updated_at = EXCLUDED.updated_at
+		INSERT INTO token_embeddings (token_address, chroma_document_id, embedding_content)
+		VALUES (:token_address, :chroma_document_id, :embedding_content)
+		ON CONFLICT (token_address) DO UPDATE SET
+			chroma_document_id=:chroma_document_id,
+			embedding_content=:embedding_content,
+			updated_at=CURRENT_TIMESTAMP
+		RETURNING id, token_address, chroma_document_id, embedding_content, created_at, updated_at
 	`
-
-	now := time.Now()
-	_, err := db.ExecContext(ctx, query, tokenAddress, chromaDocumentID, embeddingContent, now, now)
+	rows, err := db.NamedQueryContext(ctx, query, &model.TokenEmbedding{
+		TokenAddress:     tokenAddress,
+		ChromaDocumentID: chromaDocumentID,
+		EmbeddingContent: embeddingContent,
+	})
 	if err != nil {
-		return fmt.Errorf("failed to save token embedding: %w", err)
+		return err
 	}
+	defer rows.Close()
 
 	return nil
 }
@@ -44,25 +48,24 @@ func (r *repo) BatchUpsert(ctx context.Context, db *sqlx.DB, embeddings []*model
 	}()
 
 	query := `
-		INSERT INTO token_embeddings (token_address, chroma_document_id, embedding_content, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (chroma_document_id) DO UPDATE SET
-			embedding_content = EXCLUDED.embedding_content,
-			updated_at = EXCLUDED.updated_at
-		RETURNING token_address, chroma_document_id, embedding_content, created_at, updated_at
+		INSERT INTO token_embeddings (token_address, chroma_document_id, embedding_content)
+		VALUES (:token_address, :chroma_document_id, :embedding_content)
+		ON CONFLICT (token_address) DO UPDATE SET
+			chroma_document_id=:chroma_document_id,
+			embedding_content=:embedding_content,
+			updated_at=CURRENT_TIMESTAMP
+		RETURNING id, token_address, chroma_document_id, embedding_content, created_at, updated_at
 	`
-
-	stmt, err := tx.PreparexContext(ctx, query)
+	stmt, err := tx.PrepareNamedContext(ctx, query)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
 	defer stmt.Close()
 
-	now := time.Now()
-	for _, embedding := range embeddings {
+	for i := range embeddings {
 		err := stmt.
-			QueryRowxContext(ctx, embedding.TokenAddress, embedding.ChromaDocumentID, embedding.EmbeddingContent, now, now).
-			StructScan(embedding)
+			QueryRowxContext(ctx, embeddings[i]).
+			StructScan(embeddings[i])
 		if err != nil {
 			return fmt.Errorf("failed to upsert token embedding: %w", err)
 		}

@@ -8,39 +8,51 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+////////////////////////////////////////////////////////////////////////////////
+
+const (
+	LIST_META_VARIABLES_FORM = `{"listId":"%d"}`
+	LIST_META_FEATURES       = `{"rweb_tipjar_consumption_enabled":true,"responsive_web_graphql_exclude_directive_enabled":true,"verified_phone_label_enabled":false,"responsive_web_graphql_skip_user_profile_image_extensions_enabled":false,"responsive_web_graphql_timeline_navigation_enabled":true}`
+)
+
+////////////////////////////////////////////////////////////////////////////////
+
+func (c *Client) GetRawListByteById(ctx context.Context, listId uint64) (*gjson.Result, error) {
+	return c.getRawListByteById(ctx, GRAPHQL_LIST_BY_REST_ID, listId)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Deprecated: List will be removed in future versions
+//
 // GetList retrieves a Twitter list by its ID
 func (c *Client) GetList(ctx context.Context, listId uint64) (*List, error) {
-	// Build the request URL
-	requestUrl := c.buildListByIdUrl(listId)
+	gjson, err := c.getRawListByteById(ctx, GRAPHQL_LIST_BY_REST_ID, listId)
+	if err != nil {
+		return nil, err
+	}
+	return c.parseList(gjson)
+}
 
-	// Make the API request
+func (c *Client) getRawListByteById(ctx context.Context, path string, listId uint64) (*gjson.Result, error) {
+	u, _ := url.Parse(API_HOST)
+	u = u.JoinPath(path)
+
+	params := url.Values{}
+	params.Set("variables", fmt.Sprintf(LIST_META_VARIABLES_FORM, listId))
+	params.Set("features", LIST_META_FEATURES)
+
+	u.RawQuery = params.Encode()
+	requestUrl := u.String()
+
 	resp, err := c.restyClient.R().SetContext(ctx).Get(requestUrl)
 	if err != nil {
 		return nil, err
 	}
 
-	// Parse the response
-	list := gjson.GetBytes(resp.Body(), "data.list")
-	return c.parseList(&list)
-}
-
-// buildListByIdUrl constructs the URL for fetching list by ID
-func (c *Client) buildListByIdUrl(listId uint64) string {
-	baseUrl := API_HOST + GRAPHQL_LIST_BY_REST_ID
-
-	// Build query parameters
-	params := url.Values{}
-
-	// Variables parameter
-	variables := fmt.Sprintf(`{"listId":"%d"}`, listId)
-	params.Set("variables", variables)
-
-	// Features parameter
-	features := `{"rweb_tipjar_consumption_enabled":true,"responsive_web_graphql_exclude_directive_enabled":true,"verified_phone_label_enabled":false,"responsive_web_graphql_skip_user_profile_image_extensions_enabled":false,"responsive_web_graphql_timeline_navigation_enabled":true}`
-	params.Set("features", features)
-
-	// Construct final URL
-	u, _ := url.Parse(baseUrl)
-	u.RawQuery = params.Encode()
-	return u.String()
+	res := gjson.GetBytes(resp.Body(), "data.list")
+	if !res.Exists() {
+		return nil, fmt.Errorf("the list with ID %d doesn't exist", listId)
+	}
+	return &res, nil
 }

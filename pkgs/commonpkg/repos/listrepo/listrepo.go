@@ -1,112 +1,90 @@
 package listrepo
 
 import (
+	"context"
 	"database/sql"
-	"path/filepath"
+	"fmt"
 
 	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/jmoiron/sqlx"
 )
 
-type Repo struct{}
+////////////////////////////////////////////////////////////////////////////////
 
-func New() *Repo {
-	return &Repo{}
+type repo struct{}
+
+func New() *repo {
+	return &repo{}
 }
 
-func (r *Repo) Create(db *sqlx.DB, lst *model.List) error {
-	stmt := `INSERT INTO lsts(id, name, owner_uid) VALUES(:id, :name, :owner_uid)`
-	_, err := db.NamedExec(stmt, &lst)
-	return err
-}
+////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Delete(db *sqlx.DB, lid uint64) error {
-	stmt := `DELETE FROM lsts WHERE id=?`
-	_, err := db.Exec(stmt, lid)
-	return err
-}
-
-func (r *Repo) GetById(db *sqlx.DB, lid uint64) (*model.List, error) {
-	stmt := `SELECT * FROM lsts WHERE id = ?`
-	result := &model.List{}
-	err := db.Get(result, stmt, lid)
-	if err == sql.ErrNoRows {
-		err = nil
-		result = nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-func (r *Repo) Update(db *sqlx.DB, lst *model.List) error {
-	stmt := `UPDATE lsts SET name=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`
-	_, err := db.Exec(stmt, lst.Name, lst.Id)
-	return err
-}
-
-func (r *Repo) CreateEntity(db *sqlx.DB, entity *model.ListEntity) error {
-	abs, err := filepath.Abs(entity.ParentDir)
+func (r *repo) Create(ctx context.Context, db *sqlx.DB, lst *model.List) error {
+	stmt := `INSERT INTO lsts(id, name, owner_uid) 
+			VALUES(:id, :name, :owner_uid)
+			RETURNING id, name, owner_uid, created_at, updated_at`
+	rows, err := db.NamedQueryContext(ctx, stmt, lst)
 	if err != nil {
 		return err
 	}
-	entity.ParentDir = abs
+	defer rows.Close()
 
-	stmt := `INSERT INTO lst_entities(id, lst_id, name, parent_dir) VALUES(:id, :lst_id, :name, :parent_dir)`
-	result, err := db.NamedExec(stmt, &entity)
-	if err != nil {
+	if !rows.Next() {
+		return fmt.Errorf("no rows returned for list with id %d", lst.Id)
+	}
+	if err := rows.StructScan(lst); err != nil {
 		return err
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return err
-	}
-	entity.Id.Scan(id)
 	return nil
 }
 
-func (r *Repo) DeleteEntity(db *sqlx.DB, id int) error {
-	stmt := `DELETE FROM lst_entities WHERE id=?`
-	_, err := db.Exec(stmt, id)
+func (r *repo) Upsert(ctx context.Context, db *sqlx.DB, lst *model.List) error {
+	stmt := `INSERT INTO lsts(id, name, owner_uid)
+			VALUES(:id, :name, :owner_uid)
+			ON CONFLICT(id) DO UPDATE SET name=:name, updated_at=CURRENT_TIMESTAMP
+			RETURNING id, name, owner_uid, created_at, updated_at`
+	rows, err := db.NamedQueryContext(ctx, stmt, &lst)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return fmt.Errorf("no rows returned for upsert of list with id %d", lst.Id)
+	}
+	if err := rows.StructScan(lst); err != nil {
+		return err
+	}
+	return nil
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+func (r *repo) GetById(ctx context.Context, db *sqlx.DB, lid uint64) (*model.List, error) {
+	stmt := `SELECT * FROM lsts WHERE id = $1`
+	result := &model.List{}
+	err := db.Get(result, stmt, lid)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+func (r *repo) Delete(ctx context.Context, db *sqlx.DB, lid uint64) error {
+	stmt := `DELETE FROM lsts WHERE id=$1`
+	_, err := db.ExecContext(ctx, stmt, lid)
 	return err
 }
 
-func (r *Repo) GetEntityById(db *sqlx.DB, id int) (*model.ListEntity, error) {
-	stmt := `SELECT * FROM lst_entities WHERE id=?`
-	result := &model.ListEntity{}
-	err := db.Get(result, stmt, id)
-	if err == sql.ErrNoRows {
-		err = nil
-		result = nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-}
+////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) GetEntity(db *sqlx.DB, lid int64, parentDir string) (*model.ListEntity, error) {
-	parentDir, err := filepath.Abs(parentDir)
-	if err != nil {
-		return nil, err
-	}
-
-	stmt := `SELECT * FROM lst_entities WHERE lst_id=? AND parent_dir=?`
-	result := &model.ListEntity{}
-	err = db.Get(result, stmt, lid, parentDir)
-	if err == sql.ErrNoRows {
-		err = nil
-		result = nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-func (r *Repo) UpdateEntity(db *sqlx.DB, entity *model.ListEntity) error {
-	stmt := `UPDATE lst_entities SET name=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`
-	_, err := db.Exec(stmt, entity.Name, entity.Id.Int32)
+func (r *repo) Update(ctx context.Context, db *sqlx.DB, lst *model.List) error {
+	stmt := `UPDATE lsts SET name=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`
+	_, err := db.ExecContext(ctx, stmt, lst.Name, lst.Id)
 	return err
 }

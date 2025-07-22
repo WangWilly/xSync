@@ -31,9 +31,11 @@ type UserEntity struct {
 	Id                sql.NullInt32 `db:"id"`
 	Uid               uint64        `db:"user_id"`
 	Name              string        `db:"name"`
-	LatestReleaseTime sql.NullTime  `db:"latest_release_time"`
 	ParentDir         string        `db:"parent_dir"`
+	FolderName        string        `db:"folder_name"`
+	StorageSaved      bool          `db:"storage_saved"`
 	MediaCount        sql.NullInt32 `db:"media_count"`
+	LatestReleaseTime sql.NullTime  `db:"latest_release_time"`
 	CreatedAt         time.Time     `db:"created_at"`
 	UpdatedAt         time.Time     `db:"updated_at"`
 }
@@ -43,6 +45,7 @@ type UserLink struct {
 	UserTwitterId        uint64        `db:"user_id"`
 	Name                 string        `db:"name"`
 	ListEntityIdBelongTo int32         `db:"parent_lst_entity_id"`
+	StorageSaved         bool          `db:"storage_saved"`
 	CreatedAt            time.Time     `db:"created_at"`
 	UpdatedAt            time.Time     `db:"updated_at"`
 }
@@ -56,12 +59,14 @@ type List struct {
 }
 
 type ListEntity struct {
-	Id        sql.NullInt32 `db:"id"`
-	LstId     int64         `db:"lst_id"`
-	Name      string        `db:"name"`
-	ParentDir string        `db:"parent_dir"`
-	CreatedAt time.Time     `db:"created_at"`
-	UpdatedAt time.Time     `db:"updated_at"`
+	Id           sql.NullInt32 `db:"id"`
+	LstId        int64         `db:"lst_id"`
+	Name         string        `db:"name"`
+	ParentDir    string        `db:"parent_dir"`
+	FolderName   string        `db:"folder_name"`
+	StorageSaved bool          `db:"storage_saved"`
+	CreatedAt    time.Time     `db:"created_at"`
+	UpdatedAt    time.Time     `db:"updated_at"`
 }
 
 type Tweet struct {
@@ -91,10 +96,10 @@ func (le *ListEntity) Path() string {
 }
 
 func (ue *UserEntity) Path() string {
-	if ue.ParentDir == "" || ue.Name == "" {
+	if ue.ParentDir == "" || ue.FolderName == "" {
 		panic("no enough info to get path")
 	}
-	return filepath.Join(ue.ParentDir, ue.Name)
+	return filepath.Join(ue.ParentDir, ue.FolderName)
 }
 
 func (ul *UserLink) Path(db *sqlx.DB) (string, error) {

@@ -10,6 +10,8 @@ import (
 
 // handleUser serves user information as JSON
 func (s *Server) handleUser(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	userID := r.URL.Path[len("/user/"):]
 	if userID == "" {
 		http.Error(w, "User ID required", http.StatusBadRequest)
@@ -22,7 +24,7 @@ func (s *Server) handleUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.userRepo.GetById(s.db, id)
+	user, err := s.userRepo.GetById(ctx, s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get user: "+err.Error(), http.StatusInternalServerError)
 		return
