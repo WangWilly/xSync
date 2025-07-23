@@ -73,6 +73,16 @@ func (r *repo) GetById(ctx context.Context, db *sqlx.DB, uid uint64) (*model.Use
 	return result, nil
 }
 
+func (r *repo) ListAll(ctx context.Context, db *sqlx.DB) ([]*model.User, error) {
+	stmt := `SELECT * FROM users ORDER BY created_at DESC`
+	var users []*model.User
+	err := db.SelectContext(ctx, &users, stmt)
+	if err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 func (r *repo) Update(ctx context.Context, db *sqlx.DB, usr *model.User) error {

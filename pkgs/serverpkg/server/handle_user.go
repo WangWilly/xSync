@@ -35,25 +35,20 @@ func (s *Server) handleUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entities, err := s.getUserEntities(id)
+	userEntity, err := s.userEntityRepo.GetByTwitterId(ctx, s.db, user.Id)
 	if err != nil {
 		http.Error(w, "Failed to get user entities: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	data := serverdto.UserStats{
-		User:     user,
-		Entities: entities,
+		User:   user,
+		Entity: userEntity,
 	}
 
-	// Calculate stats
-	for _, entity := range entities {
-		if entity.MediaCount.Valid {
-			data.TotalMedias += int(entity.MediaCount.Int32)
-		}
-		if entity.LatestReleaseTime.Valid && entity.LatestReleaseTime.Time.After(data.LatestActivity) {
-			data.LatestActivity = entity.LatestReleaseTime.Time
-		}
+	data.TotalMedias += int(userEntity.MediaCount.Int32)
+	if userEntity.LatestReleaseTime.Valid && userEntity.LatestReleaseTime.Time.After(data.LatestActivity) {
+		data.LatestActivity = userEntity.LatestReleaseTime.Time
 	}
 
 	w.Header().Set("Content-Type", "application/json")

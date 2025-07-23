@@ -54,6 +54,14 @@ go build .
 2. `auth_token`：用于登录，[获取方式](https://github.com/WangWilly/xSync/blob/master/doc/help.md#获取-cookie)
 3. `ct0`：用于登录，[获取方式](https://github.com/WangWilly/xSync/blob/master/doc/help.md#获取-cookie)
 4. `max_download_routine`：最大并发下载协程数（如果为0取默认值）
+5. `database type`：数据库类型，支持 `sqlite` (默认) 或 `postgres`
+
+对于 PostgreSQL，还需要配置：
+- `host`：PostgreSQL 服务器地址 (默认: localhost)
+- `port`：PostgreSQL 端口 (默认: 5432)
+- `username`：数据库用户名
+- `password`：数据库密码
+- `database name`：数据库名称
 
 #### 更新配置
 
@@ -62,6 +70,54 @@ xSync --conf
 ```
 
 > **执行上述命令将导致引导配置程序重新运行，这将重新配置整个配置文件，而不是单独的配置项。单独修改配置项**请至 `%appdata%/.x_sync/conf.yaml` 或 `$HOME/.x_sync/conf.yaml`手动修改
+
+### 数据库支持
+
+xSync 支持两种数据库：
+
+#### SQLite (默认)
+- 无需额外安装，开箱即用
+- 适合单用户使用
+- 数据库文件存储在配置的存储目录中
+
+#### PostgreSQL
+- 支持多用户并发访问
+- 更好的性能和可扩展性
+- 需要单独安装 PostgreSQL 服务器
+
+##### 快速启动 PostgreSQL (使用 Docker)
+
+```bash
+# 启动 PostgreSQL 和 pgAdmin
+docker-compose -f docker-compose.postgres.yml up -d
+
+# 停止服务
+docker-compose -f docker-compose.postgres.yml down
+```
+
+默认配置：
+- PostgreSQL: `localhost:5432`
+- 用户名/密码: `xsync/xsync_password`
+- 数据库名: `xsync`
+- pgAdmin: `http://localhost:8081` (admin@xsync.local/admin)
+
+##### 环境变量配置
+
+服务器模式下，可以通过环境变量配置数据库：
+
+```bash
+# PostgreSQL
+export DB_TYPE=postgres
+export DB_HOST=localhost
+export DB_PORT=5432
+export DB_USER=xsync
+export DB_PASSWORD=xsync_password
+export DB_NAME=xsync
+
+# SQLite
+export DB_TYPE=sqlite
+export DB_PATH=./data/xSync.db
+```
 
 ### 命令说明
 

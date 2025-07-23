@@ -9,7 +9,7 @@ import (
 // UserStats represents user statistics for display
 type UserStats struct {
 	User           *model.User
-	Entities       []*model.UserEntity
+	Entity         *model.UserEntity
 	TotalMedias    int
 	LatestActivity time.Time
 }

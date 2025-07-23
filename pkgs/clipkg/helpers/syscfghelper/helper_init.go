@@ -3,7 +3,6 @@ package syscfghelper
 import (
 	"errors"
 	"os"
-	"runtime"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -17,20 +16,6 @@ const (
 )
 
 ////////////////////////////////////////////////////////////////////////////////
-
-func getHomePath() string {
-	var homepath string
-	if runtime.GOOS == "windows" {
-		homepath = os.Getenv("appdata")
-	} else {
-		homepath = os.Getenv("HOME")
-	}
-	if homepath == "" {
-		panic("failed to get home path from env")
-	}
-
-	return homepath
-}
 
 func fileExists(filename string) (bool, error) {
 	info, err := os.Stat(filename)

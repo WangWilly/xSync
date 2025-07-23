@@ -207,7 +207,7 @@ func TestRepoIntegration_GetByUserId(t *testing.T) {
 
 	t.Run("get user tweets", func(t *testing.T) {
 		// Act
-		tweets, err := repo.GetByUserId(ctx, db, userId)
+		tweets, err := repo.ListByUserId(ctx, db, userId)
 
 		// Assert
 		require.NoError(t, err)

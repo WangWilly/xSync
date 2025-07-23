@@ -25,7 +25,7 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get media from database
-	medias, err := s.mediaRepo.GetByUserId(ctx, s.db, id)
+	medias, err := s.mediaRepo.ListByUserId(ctx, s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get media: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -73,7 +73,7 @@ func (s *Server) handleAPIMedia(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get media from database
-	medias, err := s.mediaRepo.GetByUserId(ctx, s.db, id)
+	medias, err := s.mediaRepo.ListByUserId(ctx, s.db, id)
 	if err != nil {
 		http.Error(w, "Failed to get media: "+err.Error(), http.StatusInternalServerError)
 		return
