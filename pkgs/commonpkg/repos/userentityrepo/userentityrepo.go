@@ -26,9 +26,10 @@ func (r *repo) Create(ctx context.Context, db *sqlx.DB, entity *model.UserEntity
 	}
 	entity.ParentDir = abs
 
-	stmt := `INSERT INTO user_entities(user_id, name, parent_dir, folder_name, storage_saved)
-			VALUES(:user_id, :name, :parent_dir, :folder_name, :storage_saved)
-			RETURNING id, user_id, name, parent_dir, folder_name, storage_saved, media_count, latest_release_time, created_at, updated_at`
+	stmt := `INSERT INTO user_entities (user_id, name, parent_dir, folder_name, storage_saved)
+			 VALUES (:user_id, :name, :parent_dir, :folder_name, :storage_saved)
+			 RETURNING id, user_id, name, parent_dir, folder_name, storage_saved, media_count, latest_release_time, created_at, updated_at
+			`
 	rows, err := db.NamedQueryContext(ctx, stmt, entity)
 	if err != nil {
 		return err
@@ -52,10 +53,16 @@ func (r *repo) Upsert(ctx context.Context, db *sqlx.DB, entity *model.UserEntity
 	}
 	entity.ParentDir = abs
 
-	stmt := `INSERT INTO user_entities(user_id, name, parent_dir, folder_name, storage_saved)
-			 VALUES(:user_id, :name, :parent_dir, :folder_name, :storage_saved)
-			 ON CONFLICT(user_id) DO UPDATE SET name=:name, parent_dir=:parent_dir, folder_name=:folder_name, storage_saved=:storage_saved, updated_at=CURRENT_TIMESTAMP
-			 RETURNING id, user_id, name, parent_dir, folder_name, storage_saved, media_count, latest_release_time, created_at, updated_at`
+	stmt := `INSERT INTO user_entities (user_id, name, parent_dir, folder_name, storage_saved)
+			 VALUES (:user_id, :name, :parent_dir, :folder_name, :storage_saved)
+			 ON CONFLICT(user_id) DO UPDATE SET 
+			 	name=:name,
+				parent_dir=:parent_dir,
+				folder_name=:folder_name,
+				storage_saved=:storage_saved,
+				updated_at=CURRENT_TIMESTAMP
+			 RETURNING id, user_id, name, parent_dir, folder_name, storage_saved, media_count, latest_release_time, created_at, updated_at
+			`
 	rows, err := db.NamedQueryContext(ctx, stmt, entity)
 	if err != nil {
 		return err

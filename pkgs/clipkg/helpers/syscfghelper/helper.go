@@ -37,7 +37,8 @@ func New(cliParams CliParams) *helper {
 }
 
 func (h *helper) init() {
-	sysStateDir := filepath.Join(getHomePath(), SYS_STATE_DIR)
+	homeDir, err := os.UserHomeDir()
+	sysStateDir := filepath.Join(homeDir, SYS_STATE_DIR)
 	if err := os.MkdirAll(sysStateDir, 0755); err != nil {
 		log.Fatalln("failed to make app dir", err)
 	}

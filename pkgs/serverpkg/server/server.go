@@ -10,6 +10,7 @@ import (
 	"github.com/WangWilly/xSync/pkgs/commonpkg/database"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/mediarepo"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/tweetrepo"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/userentityrepo"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/userrepo"
 	"github.com/WangWilly/xSync/pkgs/downloading"
 	"github.com/jmoiron/sqlx"
@@ -20,13 +21,13 @@ import (
 // Server represents the web server for displaying tweet data
 type Server struct {
 	db        *sqlx.DB
-	dumper    *downloading.TweetDumper
 	templates *template.Template
 	port      string
 
-	userRepo  UserRepo
-	mediaRepo MediaRepo
-	tweetRepo TweetRepo
+	userRepo       UserRepo
+	userEntityRepo UserEntityRepo
+	mediaRepo      MediaRepo
+	tweetRepo      TweetRepo
 }
 
 // NewServer creates a new server instance
@@ -69,13 +70,13 @@ func NewServerWithConfig(dbConfig config.DatabaseConfig, port string) (*Server, 
 
 	return &Server{
 		db:        db,
-		dumper:    dumper,
 		templates: templates,
 		port:      port,
 
-		userRepo:  userrepo.New(),
-		mediaRepo: mediarepo.New(),
-		tweetRepo: tweetrepo.New(),
+		userRepo:       userrepo.New(),
+		userEntityRepo: userentityrepo.New(),
+		mediaRepo:      mediarepo.New(),
+		tweetRepo:      tweetrepo.New(),
 	}, nil
 }
 

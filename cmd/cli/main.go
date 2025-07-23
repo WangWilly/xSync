@@ -9,9 +9,9 @@ import (
 
 	"github.com/WangWilly/xSync/pkgs/clipkg/helpers/arghelper"
 	"github.com/WangWilly/xSync/pkgs/clipkg/helpers/metahelper"
+	"github.com/WangWilly/xSync/pkgs/clipkg/helpers/syscfghelper"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/database"
-	"github.com/WangWilly/xSync/pkgs/commonpkg/helpers/syscfghelper"
 	"github.com/WangWilly/xSync/pkgs/downloading"
 	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
 	"github.com/WangWilly/xSync/pkgs/downloading/resolveworker"

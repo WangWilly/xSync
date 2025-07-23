@@ -16,7 +16,7 @@ import (
 // TweetRepo interface for tweet operations
 type TweetRepo interface {
 	GetById(ctx context.Context, db *sqlx.DB, id int64) (*model.Tweet, error)
-	GetByUserId(ctx context.Context, db *sqlx.DB, userId uint64) ([]*model.Tweet, error)
+	ListByUserId(ctx context.Context, db *sqlx.DB, userId uint64) ([]*model.Tweet, error)
 	GetByTweetId(ctx context.Context, db *sqlx.DB, tweetId uint64) (*model.Tweet, error)
 	Update(ctx context.Context, db *sqlx.DB, tweet *model.Tweet) error
 	Create(ctx context.Context, db *sqlx.DB, tweet *model.Tweet) error

@@ -50,20 +50,6 @@ func (r *Repo) GetById(ctx context.Context, db *sqlx.DB, id int64) (*model.Media
 	return result, err
 }
 
-func (r *Repo) GetByUserId(ctx context.Context, db *sqlx.DB, userId uint64) ([]*model.Media, error) {
-	stmt := `SELECT * FROM medias WHERE user_id=$1 ORDER BY created_at DESC`
-	var medias []*model.Media
-	err := db.SelectContext(ctx, &medias, stmt, userId)
-	return medias, err
-}
-
-func (r *Repo) GetByTweetId(ctx context.Context, db *sqlx.DB, tweetId int64) ([]*model.Media, error) {
-	stmt := `SELECT * FROM medias WHERE tweet_id=$1 ORDER BY created_at ASC`
-	var medias []*model.Media
-	err := db.SelectContext(ctx, &medias, stmt, tweetId)
-	return medias, err
-}
-
 func (r *Repo) GetByLocation(ctx context.Context, db *sqlx.DB, location string) (*model.Media, error) {
 	stmt := `SELECT * FROM medias WHERE location=$1`
 	result := &model.Media{}
@@ -72,6 +58,40 @@ func (r *Repo) GetByLocation(ctx context.Context, db *sqlx.DB, location string) 
 		return nil, nil
 	}
 	return result, err
+}
+
+func (r *Repo) ListByUserId(ctx context.Context, db *sqlx.DB, userId uint64) ([]*model.Media, error) {
+	stmt := `SELECT * FROM medias WHERE user_id=$1 ORDER BY created_at DESC`
+	var medias []*model.Media
+	err := db.SelectContext(ctx, &medias, stmt, userId)
+	return medias, err
+}
+
+func (r *Repo) ListByTweetId(ctx context.Context, db *sqlx.DB, tweetId int64) ([]*model.Media, error) {
+	stmt := `SELECT * FROM medias WHERE tweet_id=$1 ORDER BY created_at ASC`
+	var medias []*model.Media
+	err := db.SelectContext(ctx, &medias, stmt, tweetId)
+	return medias, err
+}
+
+func (r *Repo) CountAll(ctx context.Context, db *sqlx.DB) (int64, error) {
+	stmt := `SELECT COUNT(*) FROM medias`
+	var count int64
+	err := db.GetContext(ctx, &count, stmt)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (r *Repo) CountByUserId(ctx context.Context, db *sqlx.DB, userId uint64) (int64, error) {
+	stmt := `SELECT COUNT(*) FROM medias WHERE user_id=$1`
+	var count int64
+	err := db.GetContext(ctx, &count, stmt, userId)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
