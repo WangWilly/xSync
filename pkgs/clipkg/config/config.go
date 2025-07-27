@@ -8,42 +8,31 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/WangWilly/xSync/pkgs/commonpkg/database"
 	"gopkg.in/yaml.v3"
 )
 
-// Config represents the main application configuration
-type Config struct {
-	RootPath           string         `yaml:"root_path"`
-	Cookie             Cookie         `yaml:"cookie"`
-	MaxDownloadRoutine int            `yaml:"max_download_routine"`
-	Database           DatabaseConfig `yaml:"database"`
-}
+////////////////////////////////////////////////////////////////////////////////
+
+const (
+	SQLITE_DB_FILE = "xSync.db"
+)
 
 ////////////////////////////////////////////////////////////////////////////////
+
+// Config represents the main application configuration
+type Config struct {
+	RootPath           string                  `yaml:"root_path"`
+	Cookie             Cookie                  `yaml:"cookie"`
+	MaxDownloadRoutine int                     `yaml:"max_download_routine"`
+	Database           database.DatabaseConfig `yaml:"database"`
+}
 
 // Cookie represents authentication cookies for Twitter API
 type Cookie struct {
 	AuthToken string `yaml:"auth_token"`
 	Ct0       string `yaml:"ct0"`
 }
-
-// DatabaseConfig represents database configuration
-type DatabaseConfig struct {
-	Type string `yaml:"type"` // "sqlite" or "postgres"
-
-	Host     string `yaml:"host"`     // For PostgreSQL
-	Port     string `yaml:"port"`     // For PostgreSQL
-	User     string `yaml:"user"`     // For PostgreSQL
-	Password string `yaml:"password"` // For PostgreSQL
-	DBName   string `yaml:"dbname"`   // For PostgreSQL
-
-	Path string `yaml:"path"` // For SQLite
-}
-
-const (
-	DATABASE_TYPE_SQLITE   = "sqlite"
-	DATABASE_TYPE_POSTGRES = "postgres"
-)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -116,7 +105,8 @@ func PromptConfig(saveto string) (*Config, error) {
 	dbType := scan.Text()
 
 	switch dbType {
-	case DATABASE_TYPE_POSTGRES:
+	case database.DATABASE_TYPE_POSTGRES:
+		conf.Database.Type = database.DATABASE_TYPE_POSTGRES
 		print("enter postgres host [default: localhost]: ")
 		scan.Scan()
 		host := scan.Text()
@@ -144,11 +134,12 @@ func PromptConfig(saveto string) (*Config, error) {
 		print("enter postgres database name: ")
 		scan.Scan()
 		conf.Database.DBName = scan.Text()
-	case DATABASE_TYPE_SQLITE:
-		conf.Database.Path = filepath.Join(storePath, "xSync.db")
+	case database.DATABASE_TYPE_SQLITE:
+		conf.Database.Type = database.DATABASE_TYPE_SQLITE
+		conf.Database.Path = filepath.Join(storePath, SQLITE_DB_FILE)
 	default:
-		conf.Database.Type = DATABASE_TYPE_SQLITE
-		conf.Database.Path = filepath.Join(storePath, "xSync.db")
+		conf.Database.Type = database.DATABASE_TYPE_SQLITE
+		conf.Database.Path = filepath.Join(storePath, SQLITE_DB_FILE)
 	}
 
 	return &conf, WriteConfig(saveto, &conf)

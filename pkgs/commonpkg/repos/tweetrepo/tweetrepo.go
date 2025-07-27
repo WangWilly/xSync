@@ -76,6 +76,16 @@ func (r *repo) CountAll(ctx context.Context, db *sqlx.DB) (int64, error) {
 	return count, nil
 }
 
+func (r *repo) CountByUserId(ctx context.Context, db *sqlx.DB, userId uint64) (int64, error) {
+	stmt := `SELECT COUNT(*) FROM tweets WHERE user_id=$1`
+	var count int64
+	err := db.GetContext(ctx, &count, stmt, userId)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 func (r *repo) Update(ctx context.Context, db *sqlx.DB, tweet *model.Tweet) error {

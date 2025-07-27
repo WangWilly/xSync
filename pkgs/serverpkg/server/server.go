@@ -4,15 +4,11 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"path/filepath"
 
-	"github.com/WangWilly/xSync/pkgs/clipkg/config"
-	"github.com/WangWilly/xSync/pkgs/commonpkg/database"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/mediarepo"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/tweetrepo"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/userentityrepo"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/userrepo"
-	"github.com/WangWilly/xSync/pkgs/downloading"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
@@ -30,42 +26,15 @@ type Server struct {
 	tweetRepo      TweetRepo
 }
 
-// NewServer creates a new server instance
-func NewServer(dbPath, port string) (*Server, error) {
-	// For backward compatibility, create a SQLite database config
-	dbConfig := config.DatabaseConfig{
-		Type: "sqlite",
-		Path: dbPath,
-	}
-	return NewServerWithConfig(dbConfig, port)
-}
-
 // NewServerWithConfig creates a new server instance with database configuration
-func NewServerWithConfig(dbConfig config.DatabaseConfig, port string) (*Server, error) {
-	// Connect to database
-	db, err := database.ConnectWithConfig(dbConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
-	}
+func NewServerWithConfig(db *sqlx.DB, port string) (*Server, error) {
 
-	// Load tweet dumper
-	dumper := downloading.NewDumper(db)
-
-	// For SQLite, try to load error file from same directory
-	if dbConfig.Type == "sqlite" || dbConfig.Type == "sqlite3" {
-		dumpPath := filepath.Join(filepath.Dir(dbConfig.Path), "error.json")
-		if err := dumper.Load(dumpPath); err != nil {
-			// Log warning but continue - this is not a fatal error
-			fmt.Printf("Warning: Failed to load tweet dump file: %v\n", err)
-		}
-	}
-
-	// Parse templates
-	templates, err := template.New("").Funcs(createTemplateFunctions()).ParseGlob("./cmd/server/templates/*.html")
+	templates, err := template.New("").
+		Funcs(createTemplateFunctions()).
+		ParseGlob("./cmd/server/templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse templates: %w", err)
 	}
-
 	fmt.Println(templates.DefinedTemplates())
 
 	return &Server{

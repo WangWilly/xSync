@@ -86,47 +86,67 @@ func (r *repo) Get(ctx context.Context, db *sqlx.DB, uid uint64, parentDir strin
 		return nil, err
 	}
 
-	result := &model.UserEntity{}
-
-	stmt := `SELECT * FROM user_entities WHERE user_id=? AND parent_dir=?`
-	err = db.GetContext(ctx, result, stmt, uid, parentDir)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+	stmt := `SELECT * FROM user_entities WHERE user_id = :user_id AND parent_dir = :parent_dir`
+	rows, err := db.NamedQueryContext(ctx, stmt, model.UserEntity{
+		Uid:       uid,
+		ParentDir: parentDir,
+	})
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
+	if !rows.Next() {
+		return nil, nil
+	}
+	result := &model.UserEntity{}
+	if err := rows.StructScan(result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
 func (r *repo) GetById(ctx context.Context, db *sqlx.DB, id int) (*model.UserEntity, error) {
-	result := &model.UserEntity{}
-
-	stmt := `SELECT * FROM user_entities WHERE id=?`
-	err := db.GetContext(ctx, result, stmt, id)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+	stmt := `SELECT * FROM user_entities WHERE id = :id`
+	rows, err := db.NamedQueryContext(ctx, stmt, model.UserEntity{
+		Id: uint64(id),
+	})
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
+	if !rows.Next() {
+		return nil, nil
+	}
+	result := &model.UserEntity{}
+	if err := rows.StructScan(result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
 func (r *repo) GetByTwitterId(ctx context.Context, db *sqlx.DB, twitterId uint64) (*model.UserEntity, error) {
-	stmt := `SELECT * FROM user_entities WHERE user_id=?`
-	result := &model.UserEntity{}
-	err := db.GetContext(ctx, result, stmt, twitterId)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+	stmt := `SELECT * FROM user_entities WHERE user_id = :user_id`
+	rows, err := db.NamedQueryContext(ctx, stmt, model.UserEntity{
+		Uid: twitterId,
+	})
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
 		return nil, err
 	}
+	defer rows.Close()
 
-	return result, nil
+	if !rows.Next() {
+		return nil, nil
+	}
+	res := &model.UserEntity{}
+	if err := rows.StructScan(res); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -134,14 +154,14 @@ func (r *repo) GetByTwitterId(ctx context.Context, db *sqlx.DB, twitterId uint64
 func (r *repo) Update(ctx context.Context, db *sqlx.DB, entity *model.UserEntity) error {
 	stmt := `UPDATE user_entities 
 			SET 
-				name=:name,
-				parent_dir=:parent_dir,
-				folder_name=:folder_name,
-				storage_saved=:storage_saved,
-				media_count=:media_count,
-				latest_release_time=:latest_release_time,
-				updated_at=CURRENT_TIMESTAMP
-			WHERE id=:id
+				name = :name,
+				parent_dir = :parent_dir,
+				folder_name = :folder_name,
+				storage_saved = :storage_saved,
+				media_count = :media_count,
+				latest_release_time = :latest_release_time,
+				updated_at = CURRENT_TIMESTAMP
+			WHERE id = :id
 			RETURNING id, user_id, name, parent_dir, folder_name, storage_saved, media_count, latest_release_time, created_at, updated_at
 			`
 	rows, err := db.NamedQueryContext(ctx, stmt, entity)
@@ -162,35 +182,54 @@ func (r *repo) Update(ctx context.Context, db *sqlx.DB, entity *model.UserEntity
 
 func (r *repo) UpdateTweetStat(ctx context.Context, db *sqlx.DB, eid int, latest_release_time time.Time, count int) error {
 	stmt := `UPDATE user_entities
-			 SET latest_release_time=?, media_count=?, updated_at=CURRENT_TIMESTAMP
-			 WHERE id=?
+			 SET
+			 	latest_release_time = :latest_release_time,
+				media_count = :media_count,
+				updated_at = CURRENT_TIMESTAMP
+			 WHERE id = :id
 			`
-	_, err := db.ExecContext(ctx, stmt, latest_release_time, count, eid)
+	_, err := db.NamedExecContext(ctx, stmt, model.UserEntity{
+		Id:                uint64(eid),
+		LatestReleaseTime: sql.NullTime{Time: latest_release_time, Valid: true},
+		MediaCount:        sql.NullInt32{Int32: int32(count), Valid: true},
+	})
 	return err
 }
 
 func (r *repo) UpdateMediaCount(ctx context.Context, db *sqlx.DB, eid int, count int) error {
 	stmt := `UPDATE user_entities
-			 SET media_count=?, updated_at=CURRENT_TIMESTAMP
-			 WHERE id=?
+			 SET
+			 	media_count = :media_count,
+				updated_at = CURRENT_TIMESTAMP
+			 WHERE id = :id
 			`
-	_, err := db.ExecContext(ctx, stmt, count, eid)
+	_, err := db.NamedExecContext(ctx, stmt, model.UserEntity{
+		Id:         uint64(eid),
+		MediaCount: sql.NullInt32{Int32: int32(count), Valid: true},
+	})
 	return err
 }
 
 func (r *repo) UpdateStorageSavedByTwitterId(ctx context.Context, db *sqlx.DB, twitterId uint64, saved bool) error {
 	stmt := `UPDATE user_entities
-			 SET storage_saved=?, updated_at=CURRENT_TIMESTAMP
-			 WHERE user_id=?
+			 SET
+			 storage_saved = :storage_saved,
+			 updated_at = CURRENT_TIMESTAMP
+			 WHERE user_id = :user_id
 			`
-	_, err := db.ExecContext(ctx, stmt, saved, twitterId)
+	_, err := db.NamedExecContext(ctx, stmt, model.UserEntity{
+		StorageSaved: saved,
+		Uid:          twitterId,
+	})
 	return err
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 func (r *repo) Delete(ctx context.Context, db *sqlx.DB, id uint32) error {
-	stmt := `DELETE FROM user_entities WHERE id=?`
-	_, err := db.ExecContext(ctx, stmt, id)
+	stmt := `DELETE FROM user_entities WHERE id = :id`
+	_, err := db.NamedExecContext(ctx, stmt, model.UserEntity{
+		Id: uint64(id),
+	})
 	return err
 }

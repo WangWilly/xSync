@@ -28,7 +28,7 @@ type UserPreviousName struct {
 }
 
 type UserEntity struct {
-	Id                sql.NullInt32 `db:"id"`
+	Id                uint64        `db:"id"`
 	Uid               uint64        `db:"user_id"`
 	Name              string        `db:"name"`
 	ParentDir         string        `db:"parent_dir"`

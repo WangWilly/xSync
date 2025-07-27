@@ -2,7 +2,9 @@ package syscfghelper
 
 import (
 	"errors"
+	"log"
 	"os"
+	"path/filepath"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -26,4 +28,13 @@ func fileExists(filename string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+func defaultSysStateDir() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalln("failed to get home directory:", err)
+	}
+
+	return filepath.Join(homeDir, SYS_STATE_DIR)
 }

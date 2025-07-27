@@ -10,15 +10,15 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-type Repo struct{}
+type repo struct{}
 
-func New() *Repo {
-	return &Repo{}
+func New() *repo {
+	return &repo{}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Create(ctx context.Context, db *sqlx.DB, media *model.Media) error {
+func (r *repo) Create(ctx context.Context, db *sqlx.DB, media *model.Media) error {
 	stmt := `INSERT INTO medias(user_id, tweet_id, location) 
 			 VALUES(:user_id, :tweet_id, :location)
 			 RETURNING id, user_id, tweet_id, location, created_at, updated_at
@@ -40,7 +40,7 @@ func (r *Repo) Create(ctx context.Context, db *sqlx.DB, media *model.Media) erro
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) GetById(ctx context.Context, db *sqlx.DB, id int64) (*model.Media, error) {
+func (r *repo) GetById(ctx context.Context, db *sqlx.DB, id int64) (*model.Media, error) {
 	stmt := `SELECT * FROM medias WHERE id=$1`
 	result := &model.Media{}
 	err := db.GetContext(ctx, result, stmt, id)
@@ -50,7 +50,7 @@ func (r *Repo) GetById(ctx context.Context, db *sqlx.DB, id int64) (*model.Media
 	return result, err
 }
 
-func (r *Repo) GetByLocation(ctx context.Context, db *sqlx.DB, location string) (*model.Media, error) {
+func (r *repo) GetByLocation(ctx context.Context, db *sqlx.DB, location string) (*model.Media, error) {
 	stmt := `SELECT * FROM medias WHERE location=$1`
 	result := &model.Media{}
 	err := db.GetContext(ctx, result, stmt, location)
@@ -60,21 +60,21 @@ func (r *Repo) GetByLocation(ctx context.Context, db *sqlx.DB, location string) 
 	return result, err
 }
 
-func (r *Repo) ListByUserId(ctx context.Context, db *sqlx.DB, userId uint64) ([]*model.Media, error) {
+func (r *repo) ListByUserId(ctx context.Context, db *sqlx.DB, userId uint64) ([]*model.Media, error) {
 	stmt := `SELECT * FROM medias WHERE user_id=$1 ORDER BY created_at DESC`
 	var medias []*model.Media
 	err := db.SelectContext(ctx, &medias, stmt, userId)
 	return medias, err
 }
 
-func (r *Repo) ListByTweetId(ctx context.Context, db *sqlx.DB, tweetId int64) ([]*model.Media, error) {
+func (r *repo) ListByTweetId(ctx context.Context, db *sqlx.DB, tweetId int64) ([]*model.Media, error) {
 	stmt := `SELECT * FROM medias WHERE tweet_id=$1 ORDER BY created_at ASC`
 	var medias []*model.Media
 	err := db.SelectContext(ctx, &medias, stmt, tweetId)
 	return medias, err
 }
 
-func (r *Repo) CountAll(ctx context.Context, db *sqlx.DB) (int64, error) {
+func (r *repo) CountAll(ctx context.Context, db *sqlx.DB) (int64, error) {
 	stmt := `SELECT COUNT(*) FROM medias`
 	var count int64
 	err := db.GetContext(ctx, &count, stmt)
@@ -84,7 +84,7 @@ func (r *Repo) CountAll(ctx context.Context, db *sqlx.DB) (int64, error) {
 	return count, nil
 }
 
-func (r *Repo) CountByUserId(ctx context.Context, db *sqlx.DB, userId uint64) (int64, error) {
+func (r *repo) CountByUserId(ctx context.Context, db *sqlx.DB, userId uint64) (int64, error) {
 	stmt := `SELECT COUNT(*) FROM medias WHERE user_id=$1`
 	var count int64
 	err := db.GetContext(ctx, &count, stmt, userId)
@@ -96,7 +96,7 @@ func (r *Repo) CountByUserId(ctx context.Context, db *sqlx.DB, userId uint64) (i
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Update(ctx context.Context, db *sqlx.DB, media *model.Media) error {
+func (r *repo) Update(ctx context.Context, db *sqlx.DB, media *model.Media) error {
 	media.UpdatedAt = time.Now()
 	stmt := `UPDATE medias 
 			 SET
@@ -105,7 +105,6 @@ func (r *Repo) Update(ctx context.Context, db *sqlx.DB, media *model.Media) erro
 			 WHERE id=:id
 			 RETURNING id, user_id, tweet_id, location, created_at, updated_at
 			`
-
 	rows, err := db.
 		NamedQueryContext(ctx, stmt, media)
 	if err != nil {
@@ -124,7 +123,7 @@ func (r *Repo) Update(ctx context.Context, db *sqlx.DB, media *model.Media) erro
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func (r *Repo) Delete(ctx context.Context, db *sqlx.DB, id int64) error {
+func (r *repo) Delete(ctx context.Context, db *sqlx.DB, id int64) error {
 	stmt := `DELETE FROM medias WHERE id=$1`
 	_, err := db.ExecContext(ctx, stmt, id)
 	return err

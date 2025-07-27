@@ -26,8 +26,9 @@ func (r *repo) Create(ctx context.Context, db *sqlx.DB, entity *model.ListEntity
 	entity.ParentDir = abs
 
 	stmt := `INSERT INTO lst_entities(lst_id, name, parent_dir, folder_name, storage_saved)
-			VALUES(:lst_id, :name, :parent_dir, :folder_name, :storage_saved)
-			RETURNING id, lst_id, name, parent_dir, folder_name, storage_saved, created_at, updated_at`
+			 VALUES(:lst_id, :name, :parent_dir, :folder_name, :storage_saved)
+			 RETURNING id, lst_id, name, parent_dir, folder_name, storage_saved, created_at, updated_at
+			`
 	rows, err := db.NamedQueryContext(ctx, stmt, entity)
 	if err != nil {
 		return err
@@ -51,9 +52,10 @@ func (r *repo) Upsert(ctx context.Context, db *sqlx.DB, entity *model.ListEntity
 	entity.ParentDir = abs
 
 	stmt := `INSERT INTO lst_entities(lst_id, name, parent_dir, folder_name, storage_saved)
-		VALUES(:lst_id, :name, :parent_dir, :folder_name, :storage_saved)
-		ON CONFLICT(lst_id) DO UPDATE SET name=:name, parent_dir=:parent_dir, folder_name=:folder_name, storage_saved=:storage_saved, updated_at=CURRENT_TIMESTAMP
-		RETURNING id, lst_id, name, parent_dir, folder_name, storage_saved, created_at, updated_at`
+			 VALUES(:lst_id, :name, :parent_dir, :folder_name, :storage_saved)
+			 ON CONFLICT(lst_id, parent_dir) DO UPDATE SET name=:name, folder_name=:folder_name, storage_saved=:storage_saved, updated_at=CURRENT_TIMESTAMP
+			 RETURNING id, lst_id, name, parent_dir, folder_name, storage_saved, created_at, updated_at
+			`
 	rows, err := db.NamedQueryContext(ctx, stmt, entity)
 	if err != nil {
 		return err
@@ -72,16 +74,22 @@ func (r *repo) Upsert(ctx context.Context, db *sqlx.DB, entity *model.ListEntity
 ////////////////////////////////////////////////////////////////////////////////
 
 func (r *repo) GetById(ctx context.Context, db *sqlx.DB, id int) (*model.ListEntity, error) {
-	stmt := `SELECT * FROM lst_entities WHERE id=?`
-	result := &model.ListEntity{}
-	err := db.GetContext(ctx, result, stmt, id)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+	stmt := `SELECT * FROM lst_entities WHERE id = :id`
+	rows, err := db.NamedQueryContext(ctx, stmt, model.ListEntity{
+		Id: sql.NullInt32{Int32: int32(id), Valid: true},
+	})
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
+	if !rows.Next() {
+		return nil, nil
+	}
+	result := &model.ListEntity{}
+	if err := rows.StructScan(result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -91,16 +99,26 @@ func (r *repo) Get(ctx context.Context, db *sqlx.DB, lid int64, parentDir string
 		return nil, err
 	}
 
-	stmt := `SELECT * FROM lst_entities WHERE lst_id=? AND parent_dir=?`
-	result := &model.ListEntity{}
-	err = db.GetContext(ctx, result, stmt, lid, parentDir)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+	stmt := `SELECT * FROM lst_entities WHERE lst_id = :lst_id AND parent_dir = :parent_dir`
+	rows, err := db.NamedQueryContext(ctx, stmt, model.ListEntity{
+		LstId:     lid,
+		ParentDir: parentDir,
+	})
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
 		return nil, err
 	}
+	defer rows.Close()
 
+	if !rows.Next() {
+		return nil, nil
+	}
+	result := &model.ListEntity{}
+	if err := rows.StructScan(result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -114,7 +132,7 @@ func (r *repo) Update(ctx context.Context, db *sqlx.DB, entity *model.ListEntity
 				folder_name=:folder_name,
 				storage_saved=:storage_saved,
 				updated_at=CURRENT_TIMESTAMP
-			 WHERE id=?
+			 WHERE id=:id
 			 RETURNING id, lst_id, name, parent_dir, folder_name, storage_saved, created_at, updated_at
 			`
 	rows, err := db.NamedQueryContext(ctx, stmt, entity)
@@ -124,7 +142,7 @@ func (r *repo) Update(ctx context.Context, db *sqlx.DB, entity *model.ListEntity
 	defer rows.Close()
 
 	if !rows.Next() {
-		return fmt.Errorf("no rows returned for update of entity with id %d", entity.Id)
+		return fmt.Errorf("no rows returned for update of entity with id %d", entity.Id.Int32)
 	}
 	if err := rows.StructScan(entity); err != nil {
 		return err
@@ -133,15 +151,25 @@ func (r *repo) Update(ctx context.Context, db *sqlx.DB, entity *model.ListEntity
 }
 
 func (r *repo) UpdateStorageSavedByTwitterId(ctx context.Context, db *sqlx.DB, twitterId uint64, saved bool) error {
-	stmt := `UPDATE lst_entities SET storage_saved=?, updated_at=CURRENT_TIMESTAMP WHERE lst_id=?`
-	_, err := db.ExecContext(ctx, stmt, saved, twitterId)
+	stmt := `UPDATE lst_entities 
+			 SET
+			 	storage_saved = :storage_saved,
+				updated_at = CURRENT_TIMESTAMP
+			 WHERE lst_id = :lst_id
+			`
+	_, err := db.NamedExecContext(ctx, stmt, model.ListEntity{
+		StorageSaved: saved,
+		LstId:        int64(twitterId),
+	})
 	return err
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 func (r *repo) Delete(ctx context.Context, db *sqlx.DB, id int) error {
-	stmt := `DELETE FROM lst_entities WHERE id=?`
-	_, err := db.ExecContext(ctx, stmt, id)
+	stmt := `DELETE FROM lst_entities WHERE id = :id`
+	_, err := db.NamedExecContext(ctx, stmt, model.ListEntity{
+		Id: sql.NullInt32{Int32: int32(id), Valid: true},
+	})
 	return err
 }
