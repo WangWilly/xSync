@@ -6,14 +6,41 @@ import (
 	"path/filepath"
 
 	"github.com/WangWilly/xSync/pkgs/clipkg/config"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/database"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/logging"
 	"github.com/WangWilly/xSync/pkgs/downloading"
 )
+
+////////////////////////////////////////////////////////////////////////////////
+
+func GetDefaultDbConfig() database.DatabaseConfig {
+	conf := GetDefaultConfig()
+	if conf.Database.Type == "" {
+		log.Fatalln("database type is not set in the configuration")
+	}
+	return conf.Database
+}
+
+func GetDefaultConfig() *config.Config {
+	confPath := filepath.Join(defaultSysStateDir(), SYS_CONF_FILE)
+	if ok, err := fileExists(confPath); err != nil || !ok {
+		log.Fatalln("configuration file does not exist or cannot be accessed:", confPath)
+	}
+	conf, err := config.ParseConfigFromFile(confPath)
+	if err != nil {
+		log.Fatalln("failed to load config:", err)
+	}
+	return conf
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 type CliParams struct {
 	IsDebug       bool
 	ConfOverWrite bool
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 type helper struct {
 	cliParams CliParams
@@ -27,20 +54,15 @@ type helper struct {
 }
 
 func New(cliParams CliParams) *helper {
-	h := &helper{
-		cliParams: cliParams,
-	}
-
+	h := &helper{cliParams: cliParams}
 	h.init()
-
 	return h
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 func (h *helper) init() {
-	sysStateDir := filepath.Join(getHomePath(), SYS_STATE_DIR)
-	if err := os.MkdirAll(sysStateDir, 0755); err != nil {
-		log.Fatalln("failed to make app dir", err)
-	}
+	sysStateDir := defaultSysStateDir()
 
 	////////////////////////////////////////////////////////////////////////////
 
@@ -74,8 +96,6 @@ func (h *helper) init() {
 	}
 
 	h.additionalCookiesPath = filepath.Join(sysStateDir, ADDITIONAL_COOKIES_FILE)
-
-	////////////////////////////////////////////////////////////////////////////
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -85,8 +105,6 @@ func (h *helper) GetDownloadingCfg() downloading.Config {
 		MaxDownloadRoutine: h.sysConfig.MaxDownloadRoutine,
 	}
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 func (h *helper) Close() {
 	if h.logFile != nil {

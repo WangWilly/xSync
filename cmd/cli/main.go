@@ -7,11 +7,12 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/WangWilly/xSync/migration/automigrate"
 	"github.com/WangWilly/xSync/pkgs/clipkg/helpers/arghelper"
 	"github.com/WangWilly/xSync/pkgs/clipkg/helpers/metahelper"
+	"github.com/WangWilly/xSync/pkgs/clipkg/helpers/syscfghelper"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/twitterclient"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/database"
-	"github.com/WangWilly/xSync/pkgs/commonpkg/helpers/syscfghelper"
 	"github.com/WangWilly/xSync/pkgs/downloading"
 	"github.com/WangWilly/xSync/pkgs/downloading/heaphelper"
 	"github.com/WangWilly/xSync/pkgs/downloading/resolveworker"
@@ -19,9 +20,6 @@ import (
 )
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	var userTwitterIdsArg arghelper.UserTwitterIdsArg
 	var userTwitterScreenNamesArg arghelper.UserTwitterScreenNamesArg
 	var twitterListIdsArg arghelper.TwitterListIdsArg
@@ -47,21 +45,26 @@ func main() {
 
 	////////////////////////////////////////////////////////////////////////////
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	logger := log.WithField("function", "main")
 	logger.Infoln("xSync started")
 
 	////////////////////////////////////////////////////////////////////////////
 
-	dbPath, err := sysCfgHelper.GetSqliteDBPath()
-	if err != nil {
-		logger.Fatalln("failed to get database path:", err)
-	}
-	db, err := database.ConnectDatabase(dbPath)
+	db, err := database.ConnectWithConfig(
+		sysCfgHelper.GetDatabaseConfig(),
+	)
 	if err != nil {
 		logger.Fatalln("failed to connect to database:", err)
 	}
 	defer db.Close()
-	logger.Infoln("database is connected")
+	log.Println("Automatically migrating database...")
+	if err := automigrate.AutoMigrateUp(
+		automigrate.AutoMigrateConfig{SqlxDB: db},
+	); err != nil {
+		log.Fatalf("Failed to create database tables: %v", err)
+	}
 
 	////////////////////////////////////////////////////////////////////////////
 

@@ -51,17 +51,6 @@ func (h *helper) saveUserToDb(ctx context.Context, user *twitterclient.User) err
 		return nil
 	}
 
-	if err := h.previousNameRepo.Create(
-		ctx,
-		h.db,
-		user.TwitterId,
-		user.Name,
-		user.ScreenName,
-	); err != nil {
-		logger.Errorln("failed to create previous name:", err)
-		return err
-	}
-
 	if err := h.userRepo.Upsert(
 		ctx,
 		h.db,
@@ -74,6 +63,17 @@ func (h *helper) saveUserToDb(ctx context.Context, user *twitterclient.User) err
 		},
 	); err != nil {
 		logger.Errorln("failed to upsert user:", err)
+		return err
+	}
+
+	if err := h.previousNameRepo.Create(
+		ctx,
+		h.db,
+		user.TwitterId,
+		user.Name,
+		user.ScreenName,
+	); err != nil {
+		logger.Errorln("failed to create previous name:", err)
 		return err
 	}
 

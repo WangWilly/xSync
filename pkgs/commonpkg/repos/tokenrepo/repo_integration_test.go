@@ -6,6 +6,7 @@ import (
 	"log"
 	"testing"
 
+	"github.com/WangWilly/xSync/migration/automigrate"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/clients/juptokenclient"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/jmoiron/sqlx"
@@ -57,8 +58,13 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not connect to docker: %s", err)
 	}
 
-	// Create the tokens table
-	setupSchema()
+	// Set up database schema using auto migration
+	err = automigrate.AutoMigrateUp(automigrate.AutoMigrateConfig{
+		SqlxDB: db,
+	})
+	if err != nil {
+		log.Fatalf("Could not run auto migration: %s", err)
+	}
 
 	// Run the tests
 	code := m.Run()
@@ -72,38 +78,17 @@ func TestMain(m *testing.M) {
 	log.Printf("Tests finished with exit code %d", code)
 }
 
-func setupSchema() {
-	// Create tokens table
-	schema := `
-	CREATE TABLE IF NOT EXISTS tokens (
-		id SERIAL PRIMARY KEY,
-		address TEXT NOT NULL UNIQUE,
-		chain_id INTEGER NOT NULL,
-		decimals INTEGER NOT NULL,
-		name TEXT NOT NULL,
-		symbol TEXT NOT NULL,
-		logo_uri TEXT,
-		tags TEXT,
-		daily TEXT,
-		extensions TEXT,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		chroma_embedded BOOLEAN DEFAULT false,
-		chroma_document_id TEXT
-	);
-	CREATE INDEX IF NOT EXISTS tokens_address_idx ON tokens(address);
-	`
-
-	_, err := db.Exec(schema)
-	if err != nil {
-		log.Fatalf("Could not create schema: %s", err)
-	}
-}
-
 func clearData() {
-	_, err := db.Exec("TRUNCATE TABLE tokens RESTART IDENTITY")
+	// Clear token_embeddings first due to foreign key constraint
+	_, err := db.Exec("DELETE FROM token_embeddings")
 	if err != nil {
-		log.Printf("Warning: Failed to clear data: %v", err)
+		log.Printf("Warning: Failed to clear token_embeddings: %v", err)
+	}
+
+	// Then clear tokens
+	_, err = db.Exec("DELETE FROM tokens")
+	if err != nil {
+		log.Printf("Warning: Failed to clear tokens: %v", err)
 	}
 }
 

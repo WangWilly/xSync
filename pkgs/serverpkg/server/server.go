@@ -4,62 +4,48 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"path/filepath"
 
-	"github.com/WangWilly/xSync/pkgs/commonpkg/database"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/mediarepo"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/tweetrepo"
+	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/userentityrepo"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/repos/userrepo"
-	"github.com/WangWilly/xSync/pkgs/downloading"
 	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 // Server represents the web server for displaying tweet data
 type Server struct {
 	db        *sqlx.DB
-	dumper    *downloading.TweetDumper
 	templates *template.Template
 	port      string
 
-	userRepo  UserRepo
-	mediaRepo MediaRepo
-	tweetRepo TweetRepo
+	userRepo       UserRepo
+	userEntityRepo UserEntityRepo
+	mediaRepo      MediaRepo
+	tweetRepo      TweetRepo
 }
 
-// NewServer creates a new server instance
-func NewServer(dbPath, port string) (*Server, error) {
-	// Connect to database
-	db, err := database.ConnectDatabase(dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
-	}
+// NewServerWithConfig creates a new server instance with database configuration
+func NewServerWithConfig(db *sqlx.DB, port string) (*Server, error) {
 
-	// Load tweet dumper
-	dumper := downloading.NewDumper(db)
-	dumpPath := filepath.Join(filepath.Dir(dbPath), "error.json")
-	if err := dumper.Load(dumpPath); err != nil {
-		// Log warning but continue - this is not a fatal error
-		fmt.Printf("Warning: Failed to load tweet dump file: %v\n", err)
-	}
-
-	// Parse templates
-	templates, err := template.New("").Funcs(createTemplateFunctions()).ParseGlob("./cmd/server/templates/*.html")
+	templates, err := template.New("").
+		Funcs(createTemplateFunctions()).
+		ParseGlob("./cmd/server/templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse templates: %w", err)
 	}
-
 	fmt.Println(templates.DefinedTemplates())
 
 	return &Server{
 		db:        db,
-		dumper:    dumper,
 		templates: templates,
 		port:      port,
 
-		userRepo:  userrepo.New(),
-		mediaRepo: mediarepo.New(),
-		tweetRepo: tweetrepo.New(),
+		userRepo:       userrepo.New(),
+		userEntityRepo: userentityrepo.New(),
+		mediaRepo:      mediarepo.New(),
+		tweetRepo:      tweetrepo.New(),
 	}, nil
 }
 

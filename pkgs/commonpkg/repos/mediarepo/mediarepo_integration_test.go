@@ -5,6 +5,7 @@ import (
 	"log"
 	"testing"
 
+	"github.com/WangWilly/xSync/migration/automigrate"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
@@ -55,8 +56,13 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not connect to docker: %s", err)
 	}
 
-	// Create the medias table
-	setupSchema()
+	// Set up database schema using auto migration
+	err = automigrate.AutoMigrateUp(automigrate.AutoMigrateConfig{
+		SqlxDB: db,
+	})
+	if err != nil {
+		log.Fatalf("Could not run auto migration: %s", err)
+	}
 
 	// Run the tests
 	code := m.Run()
@@ -70,27 +76,35 @@ func TestMain(m *testing.M) {
 	log.Printf("Tests finished with exit code %d", code)
 }
 
-func setupSchema() {
-	// Create medias table
-	schema := `
-	CREATE TABLE IF NOT EXISTS medias (
-		id SERIAL PRIMARY KEY,
-		user_id BIGINT NOT NULL,
-		tweet_id BIGINT NOT NULL,
-		location TEXT NOT NULL,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	);
-	`
-
-	_, err := db.Exec(schema)
-	if err != nil {
-		log.Fatalf("Could not create schema: %s", err)
-	}
+func clearData() {
+	// Clear medias first due to foreign key constraints
+	db.Exec("DELETE FROM medias")
+	db.Exec("DELETE FROM tweets")
+	db.Exec("DELETE FROM users")
 }
 
-func clearData() {
-	db.Exec("TRUNCATE TABLE medias RESTART IDENTITY")
+func setupTestData() {
+	// Insert test users
+	_, err := db.Exec(`
+		INSERT INTO users (id, screen_name, name, protected, friends_count) 
+		VALUES (12345, 'test_user', 'Test User', false, 100)
+		ON CONFLICT (id) DO NOTHING
+	`)
+	if err != nil {
+		log.Printf("Warning: Failed to setup test users: %v", err)
+	}
+
+	// Insert test tweets - using tweet_id values that match what the test expects
+	_, err = db.Exec(`
+		INSERT INTO tweets (id, user_id, tweet_id, content, tweet_time) 
+		VALUES 
+			(67890, 12345, 67890, 'Test tweet 1', NOW()),
+			(67891, 12345, 67891, 'Test tweet 2', NOW())
+		ON CONFLICT (tweet_id) DO NOTHING
+	`)
+	if err != nil {
+		log.Printf("Warning: Failed to setup test tweets: %v", err)
+	}
 }
 
 func TestRepoIntegration_Create(t *testing.T) {
@@ -102,8 +116,9 @@ func TestRepoIntegration_Create(t *testing.T) {
 
 	repo := New()
 
-	// Clear data before tests
+	// Clear data and setup test data before tests
 	clearData()
+	setupTestData()
 
 	t.Run("create media", func(t *testing.T) {
 		// Create a new media
@@ -158,8 +173,9 @@ func TestRepoIntegration_Update(t *testing.T) {
 
 	repo := New()
 
-	// Clear data before tests
+	// Clear data and setup test data before tests
 	clearData()
+	setupTestData()
 
 	t.Run("update with timestamp update", func(t *testing.T) {
 		// Create a new media

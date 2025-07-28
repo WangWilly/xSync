@@ -25,20 +25,6 @@ func (s *Server) handleTweets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get tweets from dumper
-	tweets := s.dumper.GetTweetsByEntityId(id)
-	var tweetData []map[string]interface{}
-
-	for _, tweet := range tweets {
-		tweetData = append(tweetData, map[string]interface{}{
-			"id":         tweet.Id,
-			"text":       tweet.Text,
-			"created_at": tweet.CreatedAt,
-			"urls":       tweet.Urls,
-			"creator":    tweet.Creator,
-		})
-	}
-
 	user, err := s.userRepo.GetById(ctx, s.db, uint64(id))
 	if err != nil {
 		http.Error(w, "Failed to get user: "+err.Error(), http.StatusInternalServerError)
@@ -48,6 +34,23 @@ func (s *Server) handleTweets(w http.ResponseWriter, r *http.Request) {
 	userName := "Unknown"
 	if user != nil {
 		userName = user.ScreenName
+	}
+
+	tweets, err := s.tweetRepo.ListByUserId(ctx, s.db, uint64(id))
+	if err != nil {
+		http.Error(w, "Failed to get tweets: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var tweetData []map[string]interface{}
+	for _, tweet := range tweets {
+		tweetData = append(tweetData, map[string]interface{}{
+			"id":         tweet.Id,
+			"content":    tweet.Content,
+			"tweet_time": tweet.TweetTime.Format(time.RFC3339),
+			"created_at": tweet.CreatedAt.Format(time.RFC3339),
+			"updated_at": tweet.UpdatedAt.Format(time.RFC3339),
+		})
 	}
 
 	data := serverdto.TweetData{

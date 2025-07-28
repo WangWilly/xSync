@@ -2,7 +2,6 @@ package downloading_test
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
 
@@ -36,7 +35,7 @@ func (m *MockUserEntity) GetParentDir() string {
 // Convert MockUserEntity to model.UserEntity for testing
 func (m *MockUserEntity) ToModelUserEntity() *model.UserEntity {
 	return &model.UserEntity{
-		Id:         sql.NullInt32{Int32: m.Id, Valid: true},
+		Id:         uint64(m.Id),
 		Uid:        m.Uid,
 		ParentDir:  m.ParentDir,
 		FolderName: "test-folder",

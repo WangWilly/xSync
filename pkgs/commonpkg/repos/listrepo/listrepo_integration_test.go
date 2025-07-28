@@ -5,6 +5,7 @@ import (
 	"log"
 	"testing"
 
+	"github.com/WangWilly/xSync/migration/automigrate"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
@@ -55,8 +56,13 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not connect to docker: %s", err)
 	}
 
-	// Create the lists table
-	setupSchema()
+	// Set up database schema using auto migration
+	err = automigrate.AutoMigrateUp(automigrate.AutoMigrateConfig{
+		SqlxDB: db,
+	})
+	if err != nil {
+		log.Fatalf("Could not run auto migration: %s", err)
+	}
 
 	// Run the tests
 	code := m.Run()
@@ -68,24 +74,6 @@ func TestMain(m *testing.M) {
 
 	// Exit with the status code from the tests
 	log.Printf("Tests finished with exit code %d", code)
-}
-
-func setupSchema() {
-	// Create lists table
-	schema := `
-	CREATE TABLE IF NOT EXISTS lsts (
-		id BIGINT PRIMARY KEY,
-		name TEXT NOT NULL,
-		owner_uid BIGINT NOT NULL,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	);
-	`
-
-	_, err := db.Exec(schema)
-	if err != nil {
-		log.Fatalf("Could not create schema: %s", err)
-	}
 }
 
 func clearData() {

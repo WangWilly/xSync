@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/WangWilly/xSync/migration/automigrate"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq" // PostgreSQL driver
@@ -56,28 +57,12 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not connect to docker: %s", err)
 	}
 
-	// Create tables
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS users (
-			id BIGINT PRIMARY KEY,
-			screen_name TEXT NOT NULL,
-			name TEXT NOT NULL,
-			protected BOOLEAN NOT NULL DEFAULT FALSE,
-			friends_count INT NOT NULL DEFAULT 0,
-			created_at TIMESTAMP DEFAULT NOW(),
-			updated_at TIMESTAMP DEFAULT NOW()
-		);
-		
-		CREATE TABLE IF NOT EXISTS user_previous_names (
-			id SERIAL PRIMARY KEY,
-			uid BIGINT NOT NULL,
-			screen_name TEXT NOT NULL,
-			name TEXT NOT NULL,
-			created_at TIMESTAMP DEFAULT NOW()
-		);
-	`)
+	// Set up database schema using auto migration
+	err = automigrate.AutoMigrateUp(automigrate.AutoMigrateConfig{
+		SqlxDB: db,
+	})
 	if err != nil {
-		log.Fatalf("Could not create tables: %s", err)
+		log.Fatalf("Could not run auto migration: %s", err)
 	}
 
 	// Run tests

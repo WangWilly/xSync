@@ -10,6 +10,7 @@ import (
 
 	_ "github.com/lib/pq" // PostgreSQL driver
 
+	"github.com/WangWilly/xSync/migration/automigrate"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/jmoiron/sqlx"
 	"github.com/ory/dockertest/v3"
@@ -57,28 +58,12 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not connect to docker: %s", err)
 	}
 
-	// Create tables
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS tweets (
-			id SERIAL PRIMARY KEY,
-			user_id BIGINT NOT NULL,
-			tweet_id BIGINT NOT NULL,
-			content TEXT,
-			tweet_time TIMESTAMP,
-			created_at TIMESTAMP DEFAULT NOW(),
-			updated_at TIMESTAMP DEFAULT NOW()
-		);
-		
-		CREATE TABLE IF NOT EXISTS medias (
-			id SERIAL PRIMARY KEY,
-			tweet_id BIGINT,
-			location TEXT,
-			created_at TIMESTAMP DEFAULT NOW(),
-			updated_at TIMESTAMP DEFAULT NOW()
-		);
-	`)
+	// Set up database schema using auto migration
+	err = automigrate.AutoMigrateUp(automigrate.AutoMigrateConfig{
+		SqlxDB: db,
+	})
 	if err != nil {
-		log.Fatalf("Could not create tables: %s", err)
+		log.Fatalf("Could not run auto migration: %s", err)
 	}
 
 	// Run tests
@@ -92,10 +77,31 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func setupTestUsers() {
+	// Insert test users that will be referenced by tweets
+	query := `
+		INSERT INTO users (id, screen_name, name, protected, friends_count) 
+		VALUES 
+			(12345, 'test_user1', 'Test User 1', false, 100),
+			(67890, 'test_user2', 'Test User 2', false, 200),
+			(11111, 'test_user3', 'Test User 3', false, 300),
+			(54321, 'test_user4', 'Test User 4', false, 400),
+			(777777, 'test_user5', 'Test User 5', false, 500)
+		ON CONFLICT (id) DO NOTHING
+	`
+	_, err := db.Exec(query)
+	if err != nil {
+		log.Printf("Warning: Failed to setup test users: %v", err)
+	}
+}
+
 func TestRepoIntegration_Create(t *testing.T) {
 	ctx := context.Background()
 
 	repo := New()
+
+	// Setup test users
+	setupTestUsers()
 
 	t.Run("create tweet", func(t *testing.T) {
 		// Arrange
@@ -120,31 +126,34 @@ func TestRepoIntegration_GetById(t *testing.T) {
 
 	repo := New()
 
-	// Create a tweet first
-	tweet := &model.Tweet{
-		UserId:    12345,
-		TweetId:   67890,
-		Content:   "Test tweet content for GetById",
-		TweetTime: time.Now(),
-	}
-	err := repo.Create(ctx, db, tweet)
-	require.NoError(t, err)
-	require.NotZero(t, tweet.Id)
+	// Setup test users
+	setupTestUsers()
 
 	t.Run("get existing tweet", func(t *testing.T) {
+		// Create a tweet first
+		tweet := &model.Tweet{
+			UserId:    12345,
+			TweetId:   67891, // Use different tweet_id to avoid conflict
+			Content:   "Test tweet content",
+			TweetTime: time.Now(),
+		}
+
+		err := repo.Create(ctx, db, tweet)
+		require.NoError(t, err)
+
 		// Act
 		result, err := repo.GetById(ctx, db, tweet.Id)
 
 		// Assert
 		require.NoError(t, err)
-		assert.NotNil(t, result)
-		assert.Equal(t, tweet.Id, result.Id)
+		assert.Equal(t, tweet.UserId, result.UserId)
+		assert.Equal(t, tweet.TweetId, result.TweetId)
 		assert.Equal(t, tweet.Content, result.Content)
 	})
 
 	t.Run("get non-existent tweet", func(t *testing.T) {
 		// Act
-		result, err := repo.GetById(ctx, db, 9999)
+		result, err := repo.GetById(ctx, db, 99999)
 
 		// Assert
 		require.NoError(t, err)
@@ -157,10 +166,13 @@ func TestRepoIntegration_Update(t *testing.T) {
 
 	repo := New()
 
+	// Setup test users
+	setupTestUsers()
+
 	// Create a tweet first
 	tweet := &model.Tweet{
 		UserId:    12345,
-		TweetId:   67890,
+		TweetId:   67892, // Use different tweet_id to avoid conflict
 		Content:   "Original content",
 		TweetTime: time.Now(),
 	}
@@ -191,6 +203,10 @@ func TestRepoIntegration_GetByUserId(t *testing.T) {
 	ctx := context.Background()
 
 	repo := New()
+
+	// Setup test users
+	setupTestUsers()
+
 	userId := uint64(54321)
 
 	// Create multiple tweets for the same user
@@ -207,7 +223,7 @@ func TestRepoIntegration_GetByUserId(t *testing.T) {
 
 	t.Run("get user tweets", func(t *testing.T) {
 		// Act
-		tweets, err := repo.GetByUserId(ctx, db, userId)
+		tweets, err := repo.ListByUserId(ctx, db, userId)
 
 		// Assert
 		require.NoError(t, err)
@@ -223,10 +239,13 @@ func TestRepoIntegration_Delete(t *testing.T) {
 
 	repo := New()
 
+	// Setup test users
+	setupTestUsers()
+
 	// Create a tweet first
 	tweet := &model.Tweet{
 		UserId:    12345,
-		TweetId:   67890,
+		TweetId:   67893, // Use different tweet_id to avoid conflict
 		Content:   "Content to be deleted",
 		TweetTime: time.Now(),
 	}
@@ -252,6 +271,10 @@ func TestRepoIntegration_GetByTweetId(t *testing.T) {
 	ctx := context.Background()
 
 	repo := New()
+
+	// Setup test users
+	setupTestUsers()
+
 	tweetId := uint64(555555)
 
 	// Create a tweet with specific tweet_id
@@ -288,6 +311,10 @@ func TestRepoIntegration_GetWithMedia(t *testing.T) {
 	ctx := context.Background()
 
 	repo := New()
+
+	// Setup test users
+	setupTestUsers()
+
 	userId := uint64(777777)
 
 	// Create a tweet
@@ -300,8 +327,8 @@ func TestRepoIntegration_GetWithMedia(t *testing.T) {
 	err := repo.Create(ctx, db, tweet)
 	require.NoError(t, err)
 
-	// Add media for this tweet
-	_, err = db.Exec(`INSERT INTO medias(tweet_id, location) VALUES($1, $2)`, tweet.Id, "path/to/media.jpg")
+	// Add media for this tweet - need both user_id and tweet_id (primary key)
+	_, err = db.Exec(`INSERT INTO medias(user_id, tweet_id, location) VALUES($1, $2, $3)`, userId, tweet.Id, "path/to/media.jpg")
 	require.NoError(t, err)
 
 	t.Run("get tweets with media", func(t *testing.T) {

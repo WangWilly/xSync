@@ -1,11 +1,4 @@
-package model
-
-import (
-	"github.com/jmoiron/sqlx"
-	_ "github.com/mattn/go-sqlite3"
-)
-
-const Schema = `
+-- Initial schema for SQLite
 CREATE TABLE IF NOT EXISTS users (
 	id INTEGER NOT NULL, 
 	screen_name VARCHAR NOT NULL, 
@@ -78,8 +71,6 @@ CREATE TABLE IF NOT EXISTS user_links (
 	FOREIGN KEY(parent_lst_entity_id) REFERENCES lst_entities (id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_user_links_user_id ON user_links (user_id);
-
 CREATE TABLE IF NOT EXISTS tweets (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	user_id INTEGER NOT NULL,
@@ -103,13 +94,10 @@ CREATE TABLE IF NOT EXISTS medias (
 	FOREIGN KEY(tweet_id) REFERENCES tweets (id)
 );
 
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_user_links_user_id ON user_links (user_id);
 CREATE INDEX IF NOT EXISTS idx_tweets_user_id ON tweets (user_id);
 CREATE INDEX IF NOT EXISTS idx_tweets_tweet_id ON tweets (tweet_id);
 CREATE INDEX IF NOT EXISTS idx_medias_user_id ON medias (user_id);
 CREATE INDEX IF NOT EXISTS idx_medias_tweet_id ON medias (tweet_id);
 CREATE INDEX IF NOT EXISTS idx_tweets_tweet_time ON tweets (tweet_time);
-`
-
-func CreateTables(db *sqlx.DB) {
-	db.MustExec(Schema)
-}

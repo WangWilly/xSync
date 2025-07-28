@@ -10,6 +10,7 @@ import (
 
 	_ "github.com/lib/pq" // PostgreSQL driver
 
+	"github.com/WangWilly/xSync/migration/automigrate"
 	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/jmoiron/sqlx"
 	"github.com/ory/dockertest/v3"
@@ -57,19 +58,12 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not connect to docker: %s", err)
 	}
 
-	// Create tables
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS token_embeddings (
-			id SERIAL PRIMARY KEY,
-			token_address VARCHAR(255) NOT NULL UNIQUE,
-			chroma_document_id VARCHAR(255) NOT NULL UNIQUE,
-			embedding_content TEXT NOT NULL,
-			created_at TIMESTAMP DEFAULT NOW(),
-			updated_at TIMESTAMP DEFAULT NOW()
-		);
-	`)
+	// Set up database schema using auto migration
+	err = automigrate.AutoMigrateUp(automigrate.AutoMigrateConfig{
+		SqlxDB: db,
+	})
 	if err != nil {
-		log.Fatalf("Could not create tables: %s", err)
+		log.Fatalf("Could not run auto migration: %s", err)
 	}
 
 	// Run tests
@@ -83,9 +77,28 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func setupTestTokens() {
+	// Insert test tokens that will be referenced by token embeddings
+	query := `
+		INSERT INTO tokens (address, chain_id, decimals, name, symbol) 
+		VALUES 
+			('0x123456789', 1, 18, 'Test Token 1', 'TT1'),
+			('0x987654321', 1, 18, 'Test Token 2', 'TT2'),
+			('0xabcdef123', 1, 18, 'Test Token 3', 'TT3')
+		ON CONFLICT (address) DO NOTHING
+	`
+	_, err := db.Exec(query)
+	if err != nil {
+		log.Printf("Warning: Failed to setup test tokens: %v", err)
+	}
+}
+
 func TestRepoIntegration_Upsert(t *testing.T) {
 	repo := New()
 	ctx := context.Background()
+
+	// Setup test tokens
+	setupTestTokens()
 
 	t.Run("insert new token embedding", func(t *testing.T) {
 		// Arrange
@@ -160,16 +173,19 @@ func TestRepoIntegration_BatchUpsert(t *testing.T) {
 	repo := New()
 	ctx := context.Background()
 
+	// Setup test tokens
+	setupTestTokens()
+
 	t.Run("batch insert new token embeddings", func(t *testing.T) {
 		// Arrange
 		embeddings := []*model.TokenEmbedding{
 			{
-				TokenAddress:     "0xABCDEF",
+				TokenAddress:     "0x123456789",
 				ChromaDocumentID: "doc-batch-1",
 				EmbeddingContent: "batch content 1",
 			},
 			{
-				TokenAddress:     "0xGHIJKL",
+				TokenAddress:     "0x987654321",
 				ChromaDocumentID: "doc-batch-2",
 				EmbeddingContent: "batch content 2",
 			},
@@ -196,15 +212,15 @@ func TestRepoIntegration_BatchUpsert(t *testing.T) {
 	})
 
 	t.Run("batch update existing token embeddings", func(t *testing.T) {
-		// Arrange
+		// Arrange - reuse the same tokens and documents from the previous test but update content
 		embeddings := []*model.TokenEmbedding{
 			{
-				TokenAddress:     "0xABCDEF",
+				TokenAddress:     "0x123456789",
 				ChromaDocumentID: "doc-batch-1",
 				EmbeddingContent: "updated batch content 1",
 			},
 			{
-				TokenAddress:     "0xGHIJKL",
+				TokenAddress:     "0x987654321",
 				ChromaDocumentID: "doc-batch-2",
 				EmbeddingContent: "updated batch content 2",
 			},

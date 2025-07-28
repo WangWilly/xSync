@@ -2,8 +2,9 @@ package syscfghelper
 
 import (
 	"errors"
+	"log"
 	"os"
-	"runtime"
+	"path/filepath"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -18,20 +19,6 @@ const (
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func getHomePath() string {
-	var homepath string
-	if runtime.GOOS == "windows" {
-		homepath = os.Getenv("appdata")
-	} else {
-		homepath = os.Getenv("HOME")
-	}
-	if homepath == "" {
-		panic("failed to get home path from env")
-	}
-
-	return homepath
-}
-
 func fileExists(filename string) (bool, error) {
 	info, err := os.Stat(filename)
 	if err == nil {
@@ -41,4 +28,13 @@ func fileExists(filename string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+func defaultSysStateDir() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalln("failed to get home directory:", err)
+	}
+
+	return filepath.Join(homeDir, SYS_STATE_DIR)
 }

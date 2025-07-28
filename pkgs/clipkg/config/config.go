@@ -8,8 +8,25 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/WangWilly/xSync/pkgs/commonpkg/database"
 	"gopkg.in/yaml.v3"
 )
+
+////////////////////////////////////////////////////////////////////////////////
+
+const (
+	SQLITE_DB_FILE = "xSync.db"
+)
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Config represents the main application configuration
+type Config struct {
+	RootPath           string                  `yaml:"root_path"`
+	Cookie             Cookie                  `yaml:"cookie"`
+	MaxDownloadRoutine int                     `yaml:"max_download_routine"`
+	Database           database.DatabaseConfig `yaml:"database"`
+}
 
 // Cookie represents authentication cookies for Twitter API
 type Cookie struct {
@@ -17,12 +34,7 @@ type Cookie struct {
 	Ct0       string `yaml:"ct0"`
 }
 
-// Config represents the main application configuration
-type Config struct {
-	RootPath           string `yaml:"root_path"`
-	Cookie             Cookie `yaml:"cookie"`
-	MaxDownloadRoutine int    `yaml:"max_download_routine"`
-}
+////////////////////////////////////////////////////////////////////////////////
 
 // ParseConfigFromFile reads configuration from the specified path
 func ParseConfigFromFile(path string) (*Config, error) {
@@ -45,6 +57,94 @@ func ParseConfigFromFile(path string) (*Config, error) {
 	return &result, nil
 }
 
+// PromptConfig interactively prompts user for configuration and saves it
+func PromptConfig(saveto string) (*Config, error) {
+	conf := Config{}
+	scan := bufio.NewScanner(os.Stdin)
+
+	////////////////////////////////////////////////////////////////////////////
+
+	print("enter storage dir: ")
+	scan.Scan()
+	storePath := scan.Text()
+	err := os.MkdirAll(storePath, 0755)
+	if err != nil {
+		return nil, err
+	}
+	storePath, err = filepath.Abs(storePath)
+	if err != nil {
+		return nil, err
+	}
+	conf.RootPath = storePath
+
+	////////////////////////////////////////////////////////////////////////////
+
+	print("enter auth_token: ")
+	scan.Scan()
+	conf.Cookie.AuthToken = scan.Text()
+
+	////////////////////////////////////////////////////////////////////////////
+
+	print("enter ct0: ")
+	scan.Scan()
+	conf.Cookie.Ct0 = scan.Text()
+
+	////////////////////////////////////////////////////////////////////////////
+
+	print("enter max download routine: ")
+	scan.Scan()
+	conf.MaxDownloadRoutine, err = strconv.Atoi(scan.Text())
+	if err != nil {
+		return nil, err
+	}
+
+	////////////////////////////////////////////////////////////////////////////
+
+	print("enter database type (sqlite/postgres) [default: sqlite]: ")
+	scan.Scan()
+	dbType := scan.Text()
+
+	switch dbType {
+	case database.DATABASE_TYPE_POSTGRES:
+		conf.Database.Type = database.DATABASE_TYPE_POSTGRES
+		print("enter postgres host [default: localhost]: ")
+		scan.Scan()
+		host := scan.Text()
+		if host == "" {
+			host = "localhost"
+		}
+		conf.Database.Host = host
+
+		print("enter postgres port [default: 5432]: ")
+		scan.Scan()
+		port := scan.Text()
+		if port == "" {
+			port = "5432"
+		}
+		conf.Database.Port = port
+
+		print("enter postgres username: ")
+		scan.Scan()
+		conf.Database.User = scan.Text()
+
+		print("enter postgres password: ")
+		scan.Scan()
+		conf.Database.Password = scan.Text()
+
+		print("enter postgres database name: ")
+		scan.Scan()
+		conf.Database.DBName = scan.Text()
+	case database.DATABASE_TYPE_SQLITE:
+		conf.Database.Type = database.DATABASE_TYPE_SQLITE
+		conf.Database.Path = filepath.Join(storePath, SQLITE_DB_FILE)
+	default:
+		conf.Database.Type = database.DATABASE_TYPE_SQLITE
+		conf.Database.Path = filepath.Join(storePath, SQLITE_DB_FILE)
+	}
+
+	return &conf, WriteConfig(saveto, &conf)
+}
+
 // WriteConfig writes configuration to the specified path
 func WriteConfig(path string, conf *Config) error {
 	file, err := os.OpenFile(path, os.O_TRUNC|os.O_WRONLY|os.O_CREATE, 0666)
@@ -61,46 +161,8 @@ func WriteConfig(path string, conf *Config) error {
 	return err
 }
 
-// PromptConfig interactively prompts user for configuration and saves it
-func PromptConfig(saveto string) (*Config, error) {
-	conf := Config{}
-	scan := bufio.NewScanner(os.Stdin)
-
-	print("enter storage dir: ")
-	scan.Scan()
-	storePath := scan.Text()
-	// ensure path is available
-	err := os.MkdirAll(storePath, 0755)
-	if err != nil {
-		return nil, err
-	}
-	storePath, err = filepath.Abs(storePath)
-	if err != nil {
-		return nil, err
-	}
-
-	conf.RootPath = storePath
-
-	print("enter auth_token: ")
-	scan.Scan()
-	conf.Cookie.AuthToken = scan.Text()
-
-	print("enter ct0: ")
-	scan.Scan()
-	conf.Cookie.Ct0 = scan.Text()
-
-	print("enter max download routine: ")
-	scan.Scan()
-	conf.MaxDownloadRoutine, err = strconv.Atoi(scan.Text())
-	if err != nil {
-		return nil, err
-	}
-
-	return &conf, WriteConfig(saveto, &conf)
-}
-
 ////////////////////////////////////////////////////////////////////////////////
-// Additional Cookie Management
+// Cookie Management
 ////////////////////////////////////////////////////////////////////////////////
 
 // ReadAdditionalCookies reads additional cookies from the specified path

@@ -3,6 +3,8 @@ package syscfghelper
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/WangWilly/xSync/pkgs/commonpkg/database"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -15,32 +17,35 @@ const (
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Deprecated: Use GetDatabaseConfig() instead
 func (h *helper) GetSqliteDBPath() (string, error) {
 	p := filepath.Join(h.sysConfig.RootPath, SQLITE_DB_FILE)
-	err := os.MkdirAll(filepath.Dir(p), 0755)
-	if err != nil && !os.IsExist(err) {
+	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil && !os.IsExist(err) {
 		return "", err
 	}
-
 	return p, nil
 }
 
 func (h *helper) GetErrorBkJsonPath() (string, error) {
 	p := filepath.Join(h.sysConfig.RootPath, ERROR_BK_JSON_FILE)
-	err := os.MkdirAll(filepath.Dir(p), 0755)
-	if err != nil && !os.IsExist(err) {
+	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil && !os.IsExist(err) {
 		return "", err
 	}
-
 	return p, nil
 }
 
 func (h *helper) GetUsersAssetsPath() (string, error) {
 	p := filepath.Join(h.sysConfig.RootPath, USERS_ASSETS_DIR)
-	err := os.MkdirAll(p, 0755)
-	if err != nil && !os.IsExist(err) {
+	if err := os.MkdirAll(p, 0755); err != nil && !os.IsExist(err) {
 		return "", err
 	}
-
 	return p, nil
+}
+
+func (h *helper) GetDatabaseConfig() database.DatabaseConfig {
+	dbConfig := h.sysConfig.Database
+	if dbConfig.Type == "" {
+		panic("Database type is not set in the configuration")
+	}
+	return dbConfig
 }

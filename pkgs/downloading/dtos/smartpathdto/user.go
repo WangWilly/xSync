@@ -56,7 +56,7 @@ func (user *UserSmartPath) Id() int {
 	if !user.isSyncToDb {
 		panic(fmt.Sprintf("user entity [%s:%d] was not created", user.Record.ParentDir, user.Record.Uid))
 	}
-	return int(user.Record.Id.Int32)
+	return int(user.Record.Id)
 }
 
 func (user *UserSmartPath) LatestReleaseTime() time.Time {

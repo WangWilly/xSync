@@ -3,6 +3,7 @@ package previousnamerepo
 import (
 	"context"
 
+	"github.com/WangWilly/xSync/pkgs/commonpkg/model"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -21,7 +22,13 @@ func (r *repo) Create(
 	name string,
 	screenName string,
 ) error {
-	stmt := `INSERT INTO user_previous_names (uid, screen_name, name) VALUES($1, $2, $3)`
-	_, err := db.ExecContext(ctx, stmt, uid, screenName, name)
+	stmt := `INSERT INTO user_previous_names (uid, screen_name, name)
+			 VALUES(:uid, :screen_name, :name)
+			`
+	_, err := db.NamedExecContext(ctx, stmt, model.UserPreviousName{
+		Uid:        uid,
+		ScreenName: screenName,
+		Name:       name,
+	})
 	return err
 }
