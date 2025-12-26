@@ -7,36 +7,36 @@
 <!-- ![GitHub Release](https://img.shields.io/github/v/release/unkmonster/tmd)  -->
 ![GitHub License](https://img.shields.io/github/license/WangWilly/xSync?logo=github)
 
-跨平台的推特媒体下载器。用于轻松，快速，安全，整洁，批量的下载推特上用户的推文。支持手动指定用户或通过列表、用户关注批量下载。开箱即用！
+A cross-platform Twitter media downloader. Easily, quickly, safely, and cleanly download users' tweets in bulk from Twitter. Supports manual user specification or batch downloads through lists and user followings. Ready to use out of the box!
 
-## Feature
+## Features
 
-- 下载指定用户的媒体推文 (video, img, gif)
-- 保留推文标题
-- 保留推文发布日期，设置为文件的修改时间
-- 以列表为单位批量下载
-- 关注中的用户批量下载
-- 在文件系统中保留列表/关注结构
-- 同步用户/列表信息：名称，是否受保护，等。。。
-- 记录用户曾用名
-- 避免重复下载
-  - 每次工作后记录用户的最新发布时间，下次工作仅从这个时间点开始拉取用户推文
-  - 向列表目录发送指向用户目录的符号链接，无论多少列表包含同一用户，本地仅保存一份用户存档
-- 避免重复获取时间线：任意一段时间内的推文仅仅会从 twitter 上拉取一次，即使这些推文下载失败。如果下载失败将它们存储到本地，以待重试或丢弃
-- 避免重复同步用户（更新用户信息，获取时间线，下载推文）
-- 速率限制：避免触发 Twitter API 速率限制
-- 自动关注受保护的用户
-- 添加备用 cookie：提高推文获取速度和总数量
+- Download media tweets from specified users (video, img, gif)
+- Preserve tweet titles
+- Preserve tweet publication dates, set as file modification time
+- Batch download by list
+- Batch download from followed users
+- Preserve list/following structure in the file system
+- Synchronize user/list information: name, protected status, etc.
+- Record user's previous names
+- Avoid duplicate downloads
+  - Record user's latest publication time after each job, only fetch tweets from this point onwards next time
+  - Send symbolic links to user directories in list directories, regardless of how many lists contain the same user, only one copy of user archive is saved locally
+- Avoid duplicate timeline fetching: tweets within any time period will only be fetched from Twitter once, even if these tweets fail to download. Failed downloads will be stored locally for retry or discard
+- Avoid duplicate user synchronization (updating user info, fetching timeline, downloading tweets)
+- Rate limiting: avoid triggering Twitter API rate limits
+- Automatically follow protected users
+- Add backup cookies: improve tweet fetching speed and total quantity
 
 ## How to use
 
-### 下载/编译
+### Download/Compile
 
-**直接下载**
+**Direct Download**
 
-前往 [Release](https://github.com/WangWilly/xSync/releases/latest) 自行选择合适的版本并下载
+Go to [Release](https://github.com/WangWilly/xSync/releases/latest) to select and download the appropriate version
 
-**自行编译**
+**Build from Source**
 
 ```bash
 git clone https://github.com/WangWilly/xSync
@@ -44,89 +44,89 @@ cd xSync
 go build .
 ```
 
-### 更新/填写配置
+### Update/Configure Settings
 
-第一次运行程序时，程序会询问如下配置信息，请按要求将配置项依次填入
+When running the program for the first time, it will ask for the following configuration information. Please fill in the configuration items as required
 
-#### 配置项介绍
+#### Configuration Items
 
-1. `storeage path`：存储路径(可以不存在)
-2. `auth_token`：用于登录，[获取方式](https://github.com/WangWilly/xSync/blob/master/doc/help.md#获取-cookie)
-3. `ct0`：用于登录，[获取方式](https://github.com/WangWilly/xSync/blob/master/doc/help.md#获取-cookie)
-4. `max_download_routine`：最大并发下载协程数（如果为0取默认值）
+1. `storage path`: Storage path (can be non-existent)
+2. `auth_token`: Used for login, [how to obtain](https://github.com/WangWilly/xSync/blob/master/doc/help.md#获取-cookie)
+3. `ct0`: Used for login, [how to obtain](https://github.com/WangWilly/xSync/blob/master/doc/help.md#获取-cookie)
+4. `max_download_routine`: Maximum concurrent download goroutines (if 0, uses default value)
 
-#### 更新配置
+#### Update Configuration
 
 ```shell
 xSync --conf
 ```
 
-> **执行上述命令将导致引导配置程序重新运行，这将重新配置整个配置文件，而不是单独的配置项。单独修改配置项**请至 `%appdata%/.x_sync/conf.yaml` 或 `$HOME/.x_sync/conf.yaml`手动修改
+> **Executing the above command will cause the configuration wizard to run again, which will reconfigure the entire configuration file, not individual configuration items. To modify individual configuration items**, please manually edit `%appdata%/.x_sync/conf.yaml` or `$HOME/.x_sync/conf.yaml`
 
-### 命令说明
-
-```
-xSync --help                 // 显示帮助
-xSync --conf                 // 重新运行配置程序
-xSync --user <user_id>       // 下载由 user_id 指定的用户的推文
-xSync --user <screen_name>   // 下载由 screen_name 指定的用户的推文
-xSync --list <list_id>       // 批量下载由 list_id 指定的列表中的每个用户
-xSync --foll <user_id>       // 批量下载由 user_id 指定的用户正关注的每个用户
-xSync --foll <screen_name>   // 批量下载由 screen_name 指定的用户正关注的每个用户
-xSync --auto-follow          // 自动关注受保护的用户
-xSync --no-retry             // 仅转储，不在程序退出前自动重试下载失败的推文
-```
-
-> 为了创建符号链接，在 Windows 上应该以管理员身份运行程序
-
-[不知道啥是 user_id/list_id/screen_name?](https://github.com/WangWilly/xSync/blob/master/doc/help.md#%E8%8E%B7%E5%8F%96-list_id-user_id-screen_name)
-
-### 示例
+### Command Instructions
 
 ```
-xSync --user elonmusk  // 下载 screen_name 为 ‘eronmusk’ 的用户
-xSync --user 1234567   // 下载 user_id 为 1234567 的用户
-xSync --list 8901234   // 下载 list_id 为 8901234 的列表
-xSync --foll 567890    // 下载 user_id 为 567890 的用户正关注的所有用户
+xSync --help                 // Display help
+xSync --conf                 // Re-run configuration program
+xSync --user <user_id>       // Download tweets from user specified by user_id
+xSync --user <screen_name>   // Download tweets from user specified by screen_name
+xSync --list <list_id>       // Batch download each user in the list specified by list_id
+xSync --foll <user_id>       // Batch download each user followed by the user specified by user_id
+xSync --foll <screen_name>   // Batch download each user followed by the user specified by screen_name
+xSync --auto-follow          // Automatically follow protected users
+xSync --no-retry             // Dump only, do not automatically retry failed tweet downloads before program exit
 ```
 
-更推荐的做法：一次运行
+> To create symbolic links, the program should be run as administrator on Windows
+
+[Don't know what user_id/list_id/screen_name is?](https://github.com/WangWilly/xSync/blob/master/doc/help.md#%E8%8E%B7%E5%8F%96-list_id-user_id-screen_name)
+
+### Examples
+
+```
+xSync --user elonmusk  // Download user with screen_name 'elonmusk'
+xSync --user 1234567   // Download user with user_id 1234567
+xSync --list 8901234   // Download list with list_id 8901234
+xSync --foll 567890    // Download all users followed by user with user_id 567890
+```
+
+Recommended approach: run once
 
 ```shell
 xSync --user elonmusk --user 1234567 --list 8901234 --foll 567890
 ```
 
-### 设置代理
+### Setting up Proxy
 
-运行前通过环境变量指定代理服务器（TUN 模式跳过这一步）
+Specify the proxy server through environment variables before running (skip this step for TUN mode)
 
 ```bash
 set HTTP_PROXY=url
 set HTTPS_PROXY=url
 ```
 
-示例：
+Example:
 ```bash
 set HTTP_PROXY=http://127.0.0.1:7890
 set HTTPS_PROXY=http://127.0.0.1:7890
 xSync --user elonmusk
 ```
 
-如果你使用windows系统，在powershell中使用以下指令设置代理：
+If you are using Windows, use the following commands in PowerShell to set up the proxy:
 ```powershell
 $Env:HTTP_PROXY="http://127.0.0.1:7890"
 $Env:HTTPS_PROXY="http://127.0.0.1:7890"
 ```
 
-### 忽略用户
+### Ignore Users
 
-程序默认会忽略被静音或被屏蔽的用户，所以当你想要下载的列表中包含你不想包含的用户，可以在推特将他们屏蔽或静音
+The program will ignore muted or blocked users by default, so if the list you want to download contains users you don't want to include, you can mute or block them on Twitter
 
-### 添加额外 cookie
+### Adding Extra Cookies
 
-程序动态从所有可用 cookie 中选择一个不会被速率限制的 cookie 请求用户推文，以避免因单一 cookie 的速率限制导致程序被阻塞。
+The program dynamically selects from all available cookies one that won't be rate limited to request user tweets, avoiding program blocking due to rate limits on a single cookie.
 
-按如下格式创建 `$HOME/.x_sync/additional_cookies.yaml` 或 `%appdata%/.x_sync/additional_cookies.yaml`
+Create `$HOME/.x_sync/additional_cookies.yaml` or `%appdata%/.x_sync/additional_cookies.yaml` in the following format
 
 ```yaml
 - auth_token: xxxxxxxxx1
@@ -136,17 +136,17 @@ $Env:HTTPS_PROXY="http://127.0.0.1:7890"
 - auth_token: xxxxxxxxxxxxxxxx3
   ct0: xxxxxxxxxxxxxxxxxxxxx3
 ```
-> 这些添加的备用 cookie，仅用来提升获取推文的速率和总量。判断是否忽略用户和自动关注受保护的用户依然使用主账号
+> These added backup cookies are only used to improve tweet fetching rate and total quantity. Determining whether to ignore users and automatically following protected users still uses the main account
 
-## Detail
+## Details
 
-### 关于速率限制
+### About Rate Limiting
 
-Twitter API 限制一段时间内过快的请求 （例如某端点每15分钟仅允许请求500次，超出这个次数会以429响应），当某一端点将要达到速率限制程序会打印一条通知并阻塞尝试请求这个端点的协程直到余量刷新（这最多是15分钟），但并不会阻塞所有协程，所以其余协程打印的消息可能将这条休眠通知覆盖让人认为程序无响应了，等待余量刷新程序会继续工作。
+Twitter API limits requests that are too frequent within a period of time (for example, a certain endpoint only allows 500 requests per 15 minutes, exceeding this number will result in a 429 response). When a certain endpoint is about to reach the rate limit, the program will print a notification and block the goroutine trying to request this endpoint until the quota is refreshed (this takes at most 15 minutes). However, it will not block all goroutines, so messages printed by other goroutines may cover this sleep notification, making it seem like the program is unresponsive. After waiting for the quota to refresh, the program will continue working.
 
-## 交流群
+## Community
 
-tg: https://t.me/+I4yyM81HaJpkNTll
+Telegram: https://t.me/+I4yyM81HaJpkNTll
 
 ## Project Structure
 
