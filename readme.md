@@ -50,7 +50,7 @@ When running the program for the first time, it will ask for the following confi
 
 #### Configuration Items
 
-1. `storeage path`: Storage path (can be non-existent)
+1. `storage path`: Storage path (can be non-existent)
 2. `auth_token`: Used for login, [how to obtain](https://github.com/WangWilly/xSync/blob/master/doc/help.md#获取-cookie)
 3. `ct0`: Used for login, [how to obtain](https://github.com/WangWilly/xSync/blob/master/doc/help.md#获取-cookie)
 4. `max_download_routine`: Maximum concurrent download goroutines (if 0, uses default value)
